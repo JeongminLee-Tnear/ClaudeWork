@@ -1,0 +1,173 @@
+import SwiftUI
+
+struct GitHubLoginView: View {
+    @Environment(AppState.self) private var appState
+    @State private var userCode: String?
+    @State private var verificationURL: String?
+    @State private var isPolling = false
+    @State private var isStarting = false
+    @State private var errorMessage: String?
+    @State private var codeCopied = false
+
+    /// When used as a sheet, this dismisses it
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+
+            Text("GitHub 연동")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            if appState.isLoggedIn {
+                authenticatedView
+            } else if let code = userCode {
+                deviceCodeView(code: code)
+            } else {
+                startView
+            }
+
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(24)
+        .frame(width: 480, height: 400)
+    }
+
+    // MARK: - Start View
+
+    private var startView: some View {
+        VStack(spacing: 12) {
+            Text("GitHub에 연결하면 레포 목록을 가져오고 원클릭으로 프로젝트를 추가할 수 있습니다.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                Task { await startDeviceFlow() }
+            } label: {
+                Label("GitHub로 로그인", systemImage: "arrow.right.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isStarting)
+
+            if isStarting {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: - Device Code View
+
+    private func deviceCodeView(code: String) -> some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("인증 코드")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text(code)
+                    .font(.system(.title, design: .monospaced))
+                    .fontWeight(.bold)
+                    .textSelection(.enabled)
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                    codeCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        codeCopied = false
+                    }
+                } label: {
+                    Label(codeCopied ? "복사됨" : "코드 복사",
+                          systemImage: codeCopied ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    if let url = verificationURL.flatMap({ URL(string: $0) }) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Label("GitHub에서 인증하기", systemImage: "safari")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            if isPolling {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("인증 대기 중...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Authenticated View
+
+    private var authenticatedView: some View {
+        VStack(spacing: 12) {
+            Label("연동 완료", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.title3)
+
+            if let user = appState.gitHubUser {
+                Text("@\(user.login)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button("닫기") {
+                dismiss()
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    // MARK: - Logic
+
+    private func startDeviceFlow() async {
+        isStarting = true
+        errorMessage = nil
+
+        do {
+            let response = try await appState.loginToGitHub()
+            userCode = response.userCode
+            verificationURL = response.verificationUri
+            isStarting = false
+
+            // Start polling
+            isPolling = true
+            try await appState.completeGitHubLogin(
+                deviceCode: response.deviceCode,
+                interval: response.interval
+            )
+            isPolling = false
+
+            // Load repos after login
+            await appState.fetchRepos()
+        } catch {
+            isStarting = false
+            isPolling = false
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+#Preview {
+    GitHubLoginView()
+        .environment(AppState())
+}
