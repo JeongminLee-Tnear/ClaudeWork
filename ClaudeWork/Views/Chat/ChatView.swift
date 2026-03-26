@@ -12,6 +12,7 @@ struct ChatView: View {
     @State private var slashDetailCommand: SlashCommand?
     @State private var textPreviewAttachment: Attachment?
     @State private var isDragOver = false
+    @State private var lastPasteboardCount = NSPasteboard.general.changeCount
 
     var body: some View {
         VStack(spacing: 0) {
@@ -341,7 +342,44 @@ struct ChatView: View {
                     .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(1...5)
                     .focused($isInputFocused)
-                    .onChange(of: inputText) { _, newValue in
+                    .onChange(of: inputText) { oldValue, newValue in
+                        // 붙여넣기 감지: 페이스트보드 changeCount가 변경됐으면 paste 발생
+                        let currentCount = NSPasteboard.general.changeCount
+                        let wasPaste = currentCount == lastPasteboardCount
+                        // Note: paste 시 changeCount는 변하지 않음 (copy 시 변함)
+                        // 대신 delta 크기 + 페이스트보드 내용으로 판단
+                        let delta = newValue.count - oldValue.count
+                        if delta > 1 {
+                            let pasteboard = NSPasteboard.general
+                            // 페이스트보드에 이미지가 있으면 → 첨부 프리뷰로
+                            if let image = NSImage(pasteboard: pasteboard) {
+                                if let attachment = AttachmentFactory.fromClipboardImage(image) {
+                                    appState.addAttachment(attachment)
+                                    inputText = oldValue
+                                    return
+                                }
+                            }
+                            // 페이스트보드에 파일 URL이 있으면 → 첨부 프리뷰로
+                            if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+                               urls.contains(where: \.isFileURL) {
+                                for url in urls where url.isFileURL {
+                                    if let attachment = AttachmentFactory.fromFileURL(url) {
+                                        appState.addAttachment(attachment)
+                                    }
+                                }
+                                inputText = oldValue
+                                return
+                            }
+                            // 긴 텍스트 → 텍스트 첨부
+                            if delta >= AttachmentFactory.longTextThreshold {
+                                let pastedText = newValue.count == delta ? newValue : String(newValue.suffix(delta))
+                                let attachment = AttachmentFactory.fromLongText(pastedText)
+                                appState.addAttachment(attachment)
+                                inputText = oldValue
+                                return
+                            }
+                        }
+
                         let trimmed = newValue.trimmingCharacters(in: .whitespaces)
                         let shouldShow = trimmed.hasPrefix("/") && !trimmed.contains(" ")
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -400,9 +438,6 @@ struct ChatView: View {
                             showSlashPopup = false
                         }
                         return .handled
-                    }
-                    .onPasteCommand(of: [.image, .fileURL, .url, .text]) { _ in
-                        handlePasteCommand()
                     }
 
                 if !showSlashPopup {
@@ -532,41 +567,6 @@ struct ChatView: View {
         }
     }
 
-    private func handlePasteCommand() {
-        let pasteboard = NSPasteboard.general
-
-        // 이미지 처리
-        if let image = NSImage(pasteboard: pasteboard) {
-            if let attachment = AttachmentFactory.fromClipboardImage(image) {
-                appState.addAttachment(attachment)
-                return
-            }
-        }
-
-        // 파일 URL 처리
-        if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
-            var addedFile = false
-            for url in urls where url.isFileURL {
-                if let attachment = AttachmentFactory.fromFileURL(url) {
-                    appState.addAttachment(attachment)
-                    addedFile = true
-                }
-            }
-            if addedFile { return }
-        }
-
-        // 텍스트 처리
-        if let text = pasteboard.string(forType: .string) {
-            if text.count >= AttachmentFactory.longTextThreshold {
-                // 긴 텍스트 → 첨부로
-                let attachment = AttachmentFactory.fromLongText(text)
-                appState.addAttachment(attachment)
-            } else {
-                // 짧은 텍스트 → 인풋에 삽입
-                inputText += text
-            }
-        }
-    }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
