@@ -78,7 +78,7 @@ enum AttachmentFactory {
         }
 
         // 썸네일 생성 (최대 80x80)
-        let thumbnailData = generateThumbnail(from: image, maxSize: 80)
+        let thumbnailData = generateThumbnail(from: image, maxSize: 200)
 
         return Attachment(
             type: .image,
@@ -99,7 +99,7 @@ enum AttachmentFactory {
 
         var thumbnail: Data?
         if type == .image, let image = NSImage(contentsOf: url) {
-            thumbnail = generateThumbnail(from: image, maxSize: 80)
+            thumbnail = generateThumbnail(from: image, maxSize: 200)
         }
 
         return Attachment(

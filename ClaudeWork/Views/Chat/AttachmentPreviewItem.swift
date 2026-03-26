@@ -49,8 +49,15 @@ struct AttachmentPreviewItem: View {
             onTap?()
         }
         .onAppear {
-            if attachment.type == .image, let data = attachment.thumbnail {
-                cachedImage = NSImage(data: data)
+            guard attachment.type == .image else { return }
+            // 1) 썸네일 데이터에서 로드
+            if let data = attachment.thumbnail, let img = NSImage(data: data) {
+                cachedImage = img
+                return
+            }
+            // 2) 폴백: 파일 경로에서 직접 로드
+            if !attachment.path.isEmpty, let img = NSImage(contentsOfFile: attachment.path) {
+                cachedImage = img
             }
         }
     }
