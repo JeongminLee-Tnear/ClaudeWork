@@ -8,7 +8,6 @@ struct AttachmentPreviewItem: View {
     var onTap: (() -> Void)?
 
     @State private var isHovered = false
-    @State private var cachedImage: NSImage?
 
     private let cardWidth: CGFloat = 80
     private let cardHeight: CGFloat = 100
@@ -24,7 +23,6 @@ struct AttachmentPreviewItem: View {
                 )
 
             if isHovered {
-                // 호버 딤 오버레이
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.black.opacity(0.3))
                     .frame(width: cardWidth, height: cardHeight)
@@ -48,10 +46,6 @@ struct AttachmentPreviewItem: View {
         .onTapGesture {
             onTap?()
         }
-        .onAppear {
-            guard attachment.type == .image, !attachment.path.isEmpty else { return }
-            cachedImage = NSImage(contentsOfFile: attachment.path)
-        }
     }
 
     @ViewBuilder
@@ -70,7 +64,7 @@ struct AttachmentPreviewItem: View {
 
     private var imageCard: some View {
         ZStack(alignment: .bottom) {
-            if let nsImage = cachedImage {
+            if let nsImage = loadImage() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -81,7 +75,6 @@ struct AttachmentPreviewItem: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
 
-            // 하단 파일명
             Text(attachment.name)
                 .font(.system(size: 8))
                 .foregroundStyle(.white)
@@ -91,6 +84,20 @@ struct AttachmentPreviewItem: View {
                 .frame(maxWidth: .infinity)
                 .background(.black.opacity(0.5))
         }
+    }
+
+    private func loadImage() -> NSImage? {
+        // 1) 파일 경로에서 직접 로드
+        if !attachment.path.isEmpty {
+            if let img = NSImage(contentsOf: URL(fileURLWithPath: attachment.path)) {
+                return img
+            }
+        }
+        // 2) 썸네일 데이터에서 로드
+        if let data = attachment.thumbnail {
+            return NSImage(data: data)
+        }
+        return nil
     }
 
     // MARK: - File Card
@@ -126,7 +133,6 @@ struct AttachmentPreviewItem: View {
             }
             Spacer(minLength: 0)
 
-            // 하단 정보
             HStack(spacing: 2) {
                 Image(systemName: "doc.text")
                     .font(.system(size: 7))
