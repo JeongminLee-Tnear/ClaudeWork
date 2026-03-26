@@ -26,6 +26,8 @@ final class AppState {
     // MARK: - Start Mode
 
     var isStartMode = false
+    var showStartInput = false
+    var startDescription = ""
 
     // MARK: - Model
 
@@ -431,6 +433,10 @@ final class AppState {
                     await MainActor.run {
                         self.isThinking = false
                         self.flushTextDeltaBuffer()
+                        // assistant 메시지가 없으면 새로 생성
+                        if self.messages.last?.role != .assistant {
+                            self.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                        }
                         guard let lastIndex = self.messages.indices.last,
                               self.messages[lastIndex].role == .assistant else { return }
                         let toolCall = ToolCall(id: id, name: name)
@@ -682,6 +688,23 @@ final class AppState {
     func startNewChat() {
         messages = []
         currentSessionId = nil
+    }
+
+    func deleteSession(_ session: ChatSession) async {
+        // 현재 보고 있는 세션이면 새 채팅으로 전환
+        if currentSessionId == session.id {
+            startNewChat()
+        }
+
+        // 파일 삭제
+        do {
+            try await persistence.deleteSession(projectId: session.projectId, sessionId: session.id)
+        } catch {
+            logger.error("Failed to delete session: \(error.localizedDescription)")
+        }
+
+        // 목록에서 제거
+        sessions.removeAll { $0.id == session.id }
     }
 
     func selectSession(id: String) {

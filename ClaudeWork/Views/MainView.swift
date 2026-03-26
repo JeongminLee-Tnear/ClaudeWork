@@ -16,8 +16,100 @@ struct MainView: View {
             } detail: {
                 detailContent
             }
-            .navigationTitle("")
-            .toolbar(removing: .title)
+            .navigationTitle({
+                let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                let base = "ClaudeWork(\(appVersion))"
+                if let cliVersion = appState.claudeVersion {
+                    return "\(base) — CC \(cliVersion)"
+                }
+                return base
+            }())
+            .toolbar {
+                ToolbarItemGroup(placement: .automatic) {
+                    Button {
+                        appState.showStartInput = true
+                        appState.startDescription = ""
+                    } label: {
+                        Text("시작")
+                    }
+                    .disabled(appState.isStreaming)
+                    .help("/start 명령 실행")
+
+                    Button {
+                        Task { await appState.sendSlashCommand("/submit") }
+                    } label: {
+                        Text("제출")
+                    }
+                    .disabled(appState.isStreaming)
+                    .help("/submit 명령 실행")
+
+                    Button {
+                        Task { await appState.sendSlashCommand("/cancel") }
+                    } label: {
+                        Text("취소")
+                    }
+                    .disabled(appState.isStreaming)
+                    .help("/cancel 명령 실행")
+                }
+
+                ToolbarSpacer(.fixed)
+
+                ToolbarItemGroup(placement: .automatic) {
+                    Button {
+                        appState.startNewChat()
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .help("새 대화")
+                    .disabled(appState.isStreaming)
+
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            appState.showMarketplace.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    .help("스킬 마켓플레이스")
+                    .disabled(appState.isStreaming)
+                }
+            }
+            .sheet(isPresented: Bindable(appState).showStartInput) {
+                VStack(spacing: 16) {
+                    Text("작업 설명 입력")
+                        .font(.headline)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+
+                    TextField("설명을 입력하세요...", text: Bindable(appState).startDescription, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...6)
+                        .frame(minWidth: 300)
+
+                    HStack {
+                        Button("취소") {
+                            appState.showStartInput = false
+                        }
+                        .keyboardShortcut(.escape)
+                        .buttonStyle(ClaudeSecondaryButtonStyle())
+
+                        Spacer()
+
+                        Button("시작") {
+                            let description = appState.startDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                            appState.showStartInput = false
+                            if !description.isEmpty {
+                                appState.isStartMode = true
+                                Task { await appState.sendSlashCommand("/start \(description)") }
+                            }
+                        }
+                        .keyboardShortcut(.return)
+                        .buttonStyle(ClaudeAccentButtonStyle())
+                        .disabled(appState.startDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .padding(20)
+                .background(ClaudeTheme.background)
+            }
             .sheet(item: firstPendingPermission) { request in
                 PermissionModal(request: request)
             }

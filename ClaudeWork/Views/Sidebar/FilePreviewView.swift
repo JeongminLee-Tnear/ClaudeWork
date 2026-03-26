@@ -93,34 +93,37 @@ struct FilePreviewView: View {
         let lineNumberWidth = max(String(lines.count).count * 9 + 16, 36)
         let highlighted = SyntaxHighlighter.highlight(text, language: fileExtension)
 
-        return ScrollView([.vertical, .horizontal]) {
-            HStack(alignment: .top, spacing: 0) {
-                // Line numbers
-                VStack(alignment: .trailing, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
-                        Text("\(index + 1)")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.6))
-                            .frame(height: 19)
+        return GeometryReader { geometry in
+            ScrollView([.vertical, .horizontal]) {
+                HStack(alignment: .top, spacing: 0) {
+                    // Line numbers
+                    VStack(alignment: .trailing, spacing: 0) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
+                            Text("\(index + 1)")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.6))
+                                .frame(height: 19)
+                        }
                     }
+                    .frame(width: CGFloat(lineNumberWidth))
+                    .padding(.top, 12)
+                    .padding(.trailing, 8)
+                    .background(ClaudeTheme.codeBackground.opacity(0.5))
+
+                    Rectangle()
+                        .fill(ClaudeTheme.border.opacity(0.5))
+                        .frame(width: 1)
+
+                    // Code content
+                    Text(highlighted)
+                        .font(.system(size: 12, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 16)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(width: CGFloat(lineNumberWidth))
-                .padding(.top, 12)
-                .padding(.trailing, 8)
-                .background(ClaudeTheme.codeBackground.opacity(0.5))
-
-                Rectangle()
-                    .fill(ClaudeTheme.border.opacity(0.5))
-                    .frame(width: 1)
-
-                // Code content
-                Text(highlighted)
-                    .font(.system(size: 12, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(.leading, 12)
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
         }
         .background(ClaudeTheme.codeBackground)

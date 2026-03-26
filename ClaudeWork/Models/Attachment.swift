@@ -10,14 +10,16 @@ struct Attachment: Identifiable, Sendable {
     let path: String
     let fileSize: Int64?
     let thumbnail: Data?
+    let textContent: String?
 
     init(
         id: UUID = UUID(),
         type: AttachmentType,
         name: String,
-        path: String,
+        path: String = "",
         fileSize: Int64? = nil,
-        thumbnail: Data? = nil
+        thumbnail: Data? = nil,
+        textContent: String? = nil
     ) {
         self.id = id
         self.type = type
@@ -25,16 +27,21 @@ struct Attachment: Identifiable, Sendable {
         self.path = path
         self.fileSize = fileSize
         self.thumbnail = thumbnail
+        self.textContent = textContent
     }
 
     enum AttachmentType: String, Sendable {
         case image
         case file
+        case text
     }
 
     /// 프롬프트에 삽입할 첨부 컨텍스트 문자열
     var promptContext: String {
-        "[Attached \(type.rawValue): \(path)]"
+        if type == .text, let text = textContent {
+            return "[Pasted text:\n\(text)\n]"
+        }
+        return "[Attached \(type.rawValue): \(path)]"
     }
 }
 
@@ -101,6 +108,26 @@ enum AttachmentFactory {
             path: url.path,
             fileSize: fileSize,
             thumbnail: thumbnail
+        )
+    }
+
+    /// 긴 텍스트 붙여넣기 임계값 (이 길이 이상이면 텍스트 첨부로 처리)
+    static let longTextThreshold = 300
+    /// 텍스트 첨부 최대 길이 (100KB)
+    static let maxTextLength = 100_000
+
+    /// 긴 텍스트로부터 Attachment 생성
+    static func fromLongText(_ text: String) -> Attachment {
+        let truncated = text.count > maxTextLength ? String(text.prefix(maxTextLength)) : text
+        let lineCount = truncated.components(separatedBy: .newlines).count
+        let charCount = truncated.count
+        let suffix = text.count > maxTextLength ? " (잘림)" : ""
+        let name = "붙여넣은 텍스트 (\(lineCount)줄, \(charCount)자\(suffix))"
+
+        return Attachment(
+            type: .text,
+            name: name,
+            textContent: truncated
         )
     }
 

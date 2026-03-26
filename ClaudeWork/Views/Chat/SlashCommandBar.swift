@@ -9,15 +9,17 @@ struct SlashCommand: Identifiable {
     let category: String
     let icon: String
     let detailDescription: String?
+    let acceptsInput: Bool
 
     var command: String { "/\(name)" }
 
-    init(name: String, description: String, category: String, icon: String, detailDescription: String? = nil) {
+    init(name: String, description: String, category: String, icon: String, detailDescription: String? = nil, acceptsInput: Bool = false) {
         self.name = name
         self.description = description
         self.category = category
         self.icon = icon
         self.detailDescription = detailDescription
+        self.acceptsInput = acceptsInput
     }
 }
 
@@ -190,7 +192,8 @@ enum SlashCommandRegistry {
             • **상담** — 세션 연속성을 가진 자유 대화. 후속 질문도 컨텍스트 유지
 
             **교차 모델 분석:** `/review`(Claude)와 `/codex`(OpenAI) 모두 실행 후 겹치는 발견(높은 신뢰도), 각각의 고유 발견을 비교합니다. "두 의사, 같은 환자" 접근법.
-            """
+            """,
+            acceptsInput: true
         ),
         SlashCommand(
             name: "qa",
@@ -211,7 +214,8 @@ enum SlashCommandRegistry {
             **자동 회귀 테스트:** 버그 수정 및 검증 시 해당 시나리오를 잡는 회귀 테스트 자동 생성.
 
             **인증 페이지 테스트:** `/setup-browser-cookies`로 실제 브라우저 세션을 먼저 임포트하세요.
-            """
+            """,
+            acceptsInput: true
         ),
         SlashCommand(
             name: "qa-only",
@@ -224,7 +228,8 @@ enum SlashCommandRegistry {
             `/qa`와 동일한 방법론이지만 버그를 리포트만 합니다. 코드 변경 없이 순수한 버그 리포트가 필요할 때 사용합니다.
 
             헬스 스코어, 스크린샷, 재현 단계를 포함한 구조화된 리포트를 생성합니다.
-            """
+            """,
+            acceptsInput: true
         ),
         SlashCommand(
             name: "design-review",
@@ -246,7 +251,8 @@ enum SlashCommandRegistry {
             **자기 조절:** CSS 전용 변경은 안전하므로 자유롭게 진행, JSX/TSX 변경은 위험 예산에 포함. 최대 30건 수정, 위험 점수 20% 초과 시 중단.
 
             **AI 슬롭 점수:** 그라디언트 히어로, 3열 그리드, 균일 라운딩 같은 AI가 만든 듯한 패턴을 감지하고 제거합니다.
-            """
+            """,
+            acceptsInput: true
         ),
         SlashCommand(
             name: "investigate",
@@ -275,7 +281,8 @@ enum SlashCommandRegistry {
             성능 회귀 탐지
 
             브라우즈 데몬을 사용하여 페이지 로드 시간, Core Web Vitals, 리소스 크기의 베이스라인을 설정합니다. 모든 PR에서 변경 전/후를 비교하고, 시간에 따른 성능 추세를 추적합니다.
-            """
+            """,
+            acceptsInput: true
         ),
 
         // 배포
@@ -298,7 +305,7 @@ enum SlashCommandRegistry {
             **리뷰 게이트:** PR 생성 전 리뷰 준비 대시보드를 확인합니다.
             """
         ),
-        SlashCommand(name: "deploy", description: "iOS 앱 배포 (dev/qa/prod)", category: "배포", icon: "iphone.and.arrow.forward"),
+        SlashCommand(name: "deploy", description: "iOS 앱 배포 (dev/qa/prod)", category: "배포", icon: "iphone.and.arrow.forward", acceptsInput: true),
         SlashCommand(
             name: "land-and-deploy",
             description: "PR 머지 + 배포 + 프로덕션 검증",
@@ -374,9 +381,10 @@ enum SlashCommandRegistry {
             **브라우저 핸드오프:** CAPTCHA나 MFA에 막히면 사용자에게 보이는 Chrome을 열어 직접 처리 가능. 모든 상태(쿠키, localStorage, 탭) 유지.
 
             30분 유휴 시 자동 종료됩니다.
-            """
+            """,
+            acceptsInput: true
         ),
-        SlashCommand(name: "gstack", description: "헤드리스 브라우저 QA/도그푸딩", category: "브라우저", icon: "network"),
+        SlashCommand(name: "gstack", description: "헤드리스 브라우저 QA/도그푸딩", category: "브라우저", icon: "network", acceptsInput: true),
         SlashCommand(
             name: "setup-browser-cookies",
             description: "브라우저 쿠키 임포트",
@@ -395,7 +403,8 @@ enum SlashCommandRegistry {
             3. 쿠키 값은 절대 표시되지 않음
 
             특정 도메인만 바로 임포트도 가능: `/setup-browser-cookies github.com`
-            """
+            """,
+            acceptsInput: true
         ),
 
         // 안전
@@ -436,7 +445,8 @@ enum SlashCommandRegistry {
             `/investigate`는 디버깅 중인 모듈을 자동 감지하여 이 기능을 자동 활성화합니다.
 
             참고: Edit/Write 도구만 차단합니다. Bash의 `sed` 같은 명령은 경계 외부 파일도 수정 가능 — 사고 방지용이지 보안 샌드박스가 아닙니다.
-            """
+            """,
+            acceptsInput: true
         ),
         SlashCommand(
             name: "unfreeze",
@@ -509,8 +519,8 @@ enum SlashCommandRegistry {
             각 팀원에 대해 구체적 칭찬과 성장 기회를 제공합니다. `.context/retros/`에 JSON 스냅샷을 저장하여 다음 실행 시 추세를 보여줍니다.
             """
         ),
-        SlashCommand(name: "loop", description: "반복 실행 (예: /loop 5m /qa)", category: "유틸리티", icon: "repeat"),
-        SlashCommand(name: "schedule", description: "크론 스케줄 원격 에이전트 설정", category: "유틸리티", icon: "calendar.badge.clock"),
+        SlashCommand(name: "loop", description: "반복 실행 (예: /loop 5m /qa)", category: "유틸리티", icon: "repeat", acceptsInput: true),
+        SlashCommand(name: "schedule", description: "크론 스케줄 원격 에이전트 설정", category: "유틸리티", icon: "calendar.badge.clock", acceptsInput: true),
         SlashCommand(
             name: "gstack-upgrade",
             description: "gstack 최신 버전 업그레이드",
@@ -626,9 +636,20 @@ struct SlashCommandPopup: View {
                         .frame(width: 20)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(cmd.command)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textPrimary)
+                        HStack(spacing: 6) {
+                            Text(cmd.command)
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textPrimary)
+
+                            if cmd.acceptsInput {
+                                Text("입력 가능")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(ClaudeTheme.textTertiary)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+                            }
+                        }
 
                         Text(cmd.description)
                             .font(.system(size: 11))
@@ -642,7 +663,13 @@ struct SlashCommandPopup: View {
             }
             .buttonStyle(.plain)
 
-            // 상세 정보 버튼 (별도 영역, 명령어 실행 안 됨)
+            Text(cmd.category)
+                .font(.system(size: 10))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+
             if cmd.detailDescription != nil {
                 Button {
                     detailCommand = cmd
@@ -650,7 +677,7 @@ struct SlashCommandPopup: View {
                     Image(systemName: "info.circle")
                         .font(.system(size: 13))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -662,13 +689,6 @@ struct SlashCommandPopup: View {
                     }
                 }
             }
-
-            Text(cmd.category)
-                .font(.system(size: 10))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(ClaudeTheme.surfaceSecondary, in: Capsule())
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

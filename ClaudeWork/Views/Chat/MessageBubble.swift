@@ -47,14 +47,14 @@ struct MessageBubble: View {
                 .foregroundStyle(ClaudeTheme.userBubbleText)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.vertical, 14)
                 .background(ClaudeTheme.userBubble, in: bubbleShape)
                 .accessibilityLabel("내 메시지: \(message.content)")
         } else {
             MarkdownContentView(text: message.content)
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.vertical, 14)
                 .background(ClaudeTheme.assistantBubble, in: bubbleShape)
                 .overlay(
                     bubbleShape

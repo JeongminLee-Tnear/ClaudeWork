@@ -6,77 +6,89 @@ struct GitStatusView: View {
     @Environment(AppState.self) private var appState
     @State private var gitStatus: GitStatusInfo = .loading
     @State private var refreshTask: Task<Void, Never>?
+    @State private var localBranches: [String] = []
+    @State private var remoteBranches: [String] = []
 
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             switch gitStatus {
             case .loading:
-                ProgressView()
-                    .controlSize(.mini)
-                Text("확인 중...")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("확인 중...")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Spacer()
+                }
 
             case .notARepo:
-                Image(systemName: "folder")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Text("Git 프로젝트가 아님")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text("Git 프로젝트가 아님")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Spacer()
+                }
 
             case .clean(let branch):
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.statusSuccess)
-                Text(branch)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                Text("변경 없음")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                // 첫 줄: 브랜치 버튼 + 새로고침
+                HStack(spacing: 8) {
+                    branchMenu(branch)
+                    Spacer()
+                    refreshButton
+                }
+                // 둘째 줄: 상태
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                    Text("변경 없음")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                }
 
             case .dirty(let branch, let changes):
-                Circle()
-                    .fill(ClaudeTheme.accent)
-                    .frame(width: 6, height: 6)
-                Text(branch)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                Text("\(changes.total)개 변경")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.accent)
+                // 첫 줄: 브랜치 버튼 + 새로고침
+                HStack(spacing: 8) {
+                    branchMenu(branch)
+                    Spacer()
+                    refreshButton
+                }
+                // 둘째 줄: 변경 상태 + 뱃지
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(ClaudeTheme.accent)
+                        .frame(width: 6, height: 6)
+                    Text("\(changes.total)개 변경")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ClaudeTheme.accent)
 
-                if changes.modified > 0 {
-                    badge("수정 \(changes.modified)", color: .blue)
-                }
-                if changes.added > 0 {
-                    badge("추가 \(changes.added)", color: ClaudeTheme.statusSuccess)
-                }
-                if changes.deleted > 0 {
-                    badge("삭제 \(changes.deleted)", color: ClaudeTheme.statusError)
+                    if changes.modified > 0 {
+                        badge("수정 \(changes.modified)", color: .blue)
+                    }
+                    if changes.added > 0 {
+                        badge("추가 \(changes.added)", color: ClaudeTheme.statusSuccess)
+                    }
+                    if changes.deleted > 0 {
+                        badge("삭제 \(changes.deleted)", color: ClaudeTheme.statusError)
+                    }
                 }
 
             case .error:
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Text("상태 확인 실패")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text("상태 확인 실패")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Spacer()
+                    refreshButton
+                }
             }
-
-            Spacer()
-
-            Button {
-                refresh()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .buttonStyle(.borderless)
-            .help("새로고침")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -85,6 +97,121 @@ struct GitStatusView: View {
         .onChange(of: projectPath) { _, _ in refresh() }
         .onChange(of: appState.isStreaming) { old, new in
             if old && !new { refresh() }
+        }
+    }
+
+    // MARK: - Refresh Button
+
+    private var refreshButton: some View {
+        Button {
+            refresh()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 10))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+        .buttonStyle(.borderless)
+        .help("새로고침")
+    }
+
+    // MARK: - Branch Menu
+
+    private func branchMenu(_ currentBranch: String) -> some View {
+        Menu {
+            Section("로컬") {
+                ForEach(localBranches, id: \.self) { branch in
+                    Button {
+                        Task {
+                            let success = await gitCheckout(branch: branch, at: projectPath)
+                            if success { refresh(); loadBranches() }
+                        }
+                    } label: {
+                        HStack {
+                            Text(branch)
+                            if branch == currentBranch {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    .disabled(branch == currentBranch)
+                }
+                if localBranches.isEmpty {
+                    Text("로컬 브랜치 없음")
+                }
+            }
+
+            Section("리모트 (origin)") {
+                ForEach(remoteBranches, id: \.self) { branch in
+                    Button {
+                        // 리모트 브랜치 체크아웃 시 로컬 트래킹 브랜치 생성
+                        Task {
+                            let success = await gitCheckout(branch: branch, at: projectPath)
+                            if success { refresh(); loadBranches() }
+                        }
+                    } label: {
+                        Text(branch)
+                    }
+                }
+                if remoteBranches.isEmpty {
+                    Text("리모트 브랜치 없음")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 10))
+                Text(currentBranch)
+                    .font(.system(size: 12, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(ClaudeTheme.textPrimary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(ClaudeTheme.surfacePrimary.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("브랜치 변경")
+        .onAppear { loadBranches() }
+        .onChange(of: projectPath) { _, _ in loadBranches() }
+    }
+
+    // MARK: - Role & Branch Loading
+
+    private var currentRole: ProjectRole? {
+        let setup = SetupService()
+        return setup.getProjectRole(at: projectPath)
+    }
+
+    private func loadBranches() {
+        Task {
+            let result = await fetchGitBranches(at: projectPath)
+            let role = currentRole
+            guard let prefix = role?.branchPrefix else {
+                localBranches = result.local
+                remoteBranches = result.remote
+                return
+            }
+            let current = currentBranchName
+            let allowed: (String) -> Bool = { branch in
+                branch.hasPrefix(prefix)
+                || branch == "main"
+                || branch == "master"
+                || branch == "develop"
+                || branch == "qa"
+                || branch == current
+            }
+            localBranches = result.local.filter(allowed)
+            remoteBranches = result.remote.filter(allowed)
+        }
+    }
+
+    private var currentBranchName: String? {
+        switch gitStatus {
+        case .clean(let branch): branch
+        case .dirty(let branch, _): branch
+        default: nil
         }
     }
 
@@ -169,12 +296,65 @@ private func fetchGitStatus(at path: String) async -> GitStatusInfo {
     )
 }
 
+// MARK: - Git Branch List
+
+struct BranchList {
+    var local: [String] = []
+    var remote: [String] = []
+}
+
+private func fetchGitBranches(at path: String) async -> BranchList {
+    guard let result = await runGit(["branch", "-a", "--no-color"], at: path) else {
+        return BranchList()
+    }
+
+    var local: [String] = []
+    var remote: [String] = []
+    var localSet = Set<String>()
+
+    for line in result.components(separatedBy: "\n") {
+        var name = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.hasPrefix("* ") { name = String(name.dropFirst(2)) }
+        if name.isEmpty { continue }
+        if name.contains("->") { continue }
+
+        if name.hasPrefix("remotes/origin/") {
+            let shortName = String(name.dropFirst("remotes/origin/".count))
+            remote.append(shortName)
+        } else {
+            local.append(name)
+            localSet.insert(name)
+        }
+    }
+
+    // 리모트에서 이미 로컬에 있는 브랜치 제외
+    remote = remote.filter { !localSet.contains($0) }
+
+    return BranchList(local: local.sorted(), remote: remote.sorted())
+}
+
+// MARK: - Git Checkout
+
+private func gitCheckout(branch: String, at path: String) async -> Bool {
+    guard let _ = await runGit(["checkout", branch], at: path) else {
+        return false
+    }
+    return true
+}
+
+// MARK: - Git Runner
+
 private func runGit(_ args: [String], at path: String) async -> String? {
     await Task.detached {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = args
         process.currentDirectoryURL = URL(fileURLWithPath: path)
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_PAGER": "",
+            "PAGER": "",
+        ]) { _, new in new }
 
         let pipe = Pipe()
         process.standardOutput = pipe

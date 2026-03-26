@@ -31,6 +31,15 @@ enum ProjectRole: String, CaseIterable, Sendable {
         case .design: "디자인 작업을 수행합니다"
         }
     }
+
+    /// 역할별 브랜치 접두사. dev는 nil(모든 브랜치 접근 가능).
+    var branchPrefix: String? {
+        switch self {
+        case .dev: nil
+        case .po: "po/"
+        case .design: "design/"
+        }
+    }
 }
 
 /// Manages global tool installation checks and execution.
@@ -197,6 +206,12 @@ actor SetupService {
     nonisolated func projectHasRole(at projectPath: String) -> Bool {
         let rolePath = (projectPath as NSString).appendingPathComponent(".claude/role")
         return FileManager.default.fileExists(atPath: rolePath)
+    }
+
+    nonisolated func getProjectRole(at projectPath: String) -> ProjectRole? {
+        let rolePath = (projectPath as NSString).appendingPathComponent(".claude/role")
+        guard let raw = try? String(contentsOfFile: rolePath, encoding: .utf8) else { return nil }
+        return ProjectRole(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     nonisolated func setProjectRole(at projectPath: String, role: ProjectRole) throws {

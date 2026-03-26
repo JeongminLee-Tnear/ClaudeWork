@@ -74,6 +74,15 @@ struct HistoryListView: View {
                 .foregroundStyle(ClaudeTheme.textTertiary)
         }
         .padding(.vertical, 2)
+        .contextMenu {
+            Button(role: .destructive) {
+                Task {
+                    await appState.deleteSession(session)
+                }
+            } label: {
+                Label("삭제", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Empty State

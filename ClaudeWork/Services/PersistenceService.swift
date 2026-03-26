@@ -58,6 +58,18 @@ actor PersistenceService {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    func deleteSession(projectId: UUID, sessionId: String) throws {
+        let url = baseURL
+            .appendingPathComponent("sessions")
+            .appendingPathComponent(projectId.uuidString)
+            .appendingPathComponent("\(sessionId).json")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) {
+            try fm.removeItem(at: url)
+            logger.debug("Deleted session \(sessionId, privacy: .public)")
+        }
+    }
+
     func loadSession(projectId: UUID, sessionId: String) -> ChatSession? {
         let url = baseURL
             .appendingPathComponent("sessions")

@@ -18,7 +18,7 @@ struct GitGuideView: View {
             }
             .background(ClaudeTheme.background)
         }
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(width: 900, height: 650)
     }
 
     // MARK: - Topic List
@@ -119,6 +119,10 @@ enum GitTopic: String, CaseIterable, Identifiable {
     case pullRequest
     case merge
     case gitStatus
+    case role
+    case startButton
+    case submitButton
+    case cancelButton
 
     var id: String { rawValue }
 
@@ -132,6 +136,10 @@ enum GitTopic: String, CaseIterable, Identifiable {
         case .pullRequest: "Pull Request (PR)"
         case .merge: "머지"
         case .gitStatus: "Git 상태 읽기"
+        case .role: "역할 설정"
+        case .startButton: "시작 버튼"
+        case .submitButton: "제출 버튼"
+        case .cancelButton: "취소 버튼"
         }
     }
 
@@ -145,6 +153,10 @@ enum GitTopic: String, CaseIterable, Identifiable {
         case .pullRequest: "text.bubble"
         case .merge: "arrow.triangle.merge"
         case .gitStatus: "eye"
+        case .role: "person.crop.circle.badge.checkmark"
+        case .startButton: "play.circle"
+        case .submitButton: "paperplane.fill"
+        case .cancelButton: "xmark.circle"
         }
     }
 
@@ -166,6 +178,14 @@ enum GitTopic: String, CaseIterable, Identifiable {
             "두 페이지의 작업을 하나로 합치는 것이에요. 내가 작업한 브랜치를 원본(main)에 반영하는 과정이에요."
         case .gitStatus:
             "피그마의 변경 표시(파란 점)와 비슷해요. 어떤 파일이 수정됐는지, 저장(커밋) 준비가 됐는지 알려줘요."
+        case .role:
+            "피그마에서 편집자(Editor)와 뷰어(Viewer) 권한이 다르듯이, ClaudeWork에서도 역할에 따라 할 수 있는 작업 범위가 달라져요."
+        case .startButton:
+            "피그마에서 새 페이지를 만들고 작업을 시작하는 것과 같아요. 원본(qa)을 복사해서 내 작업 공간을 만드는 거예요."
+        case .submitButton:
+            "피그마에서 작업한 시안을 팀 채널에 공유하고 \"확인해주세요\"라고 보내는 것과 같아요. 내 작업물을 팀에게 전달하는 거예요."
+        case .cancelButton:
+            "피그마에서 실험용으로 만든 페이지를 삭제하고 원래 상태로 돌아가는 것과 같아요. 작업을 없던 일로 하는 거예요."
         }
     }
 
@@ -290,6 +310,88 @@ enum GitTopic: String, CaseIterable, Identifiable {
                     example: nil
                 ),
             ]
+        case .role:
+            [
+                GuideSection(
+                    title: "역할이란?",
+                    body: "ClaudeWork에서 내가 어떤 직군인지 설정하는 거예요. 역할에 따라 브랜치 이름과 제출 방식이 자동으로 결정돼요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "사용 가능한 역할",
+                    body: "dev (개발자): 코드를 직접 qa에 머지할 수 있어요.\ndesign (디자이너): PR을 만들어서 리뷰를 요청해요.\npm (기획자): PR을 만들어서 리뷰를 요청해요.\npo (프로덕트 오너): PR을 만들어서 리뷰를 요청해요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "비개발자 안전 규칙",
+                    body: "design, pm, po 역할에서는 실수로 빌드 설정이나 인증서 파일을 건드리지 않도록 자동 보호가 켜져요. 위험한 파일은 제출할 때 자동으로 제외돼요.",
+                    example: "Xcode 프로젝트 설정(.pbxproj), 패키지 설정(Package.swift), 환경변수(.env) 등은 자동 제외"
+                ),
+            ]
+        case .startButton:
+            [
+                GuideSection(
+                    title: "시작 버튼이 하는 일",
+                    body: "qa 브랜치(팀 공용 테스트 브랜치)의 최신 상태를 가져온 다음, 내 역할에 맞는 새 작업 브랜치를 만들어요.",
+                    example: "dev 역할 → dev/로그인-화면-개선\ndesign 역할 → design/온보딩-리디자인"
+                ),
+                GuideSection(
+                    title: "이미 작업 중인 브랜치가 있으면?",
+                    body: "역할에 맞는 브랜치에 이미 있으면 새로 만들지 않고, 현재 상태(변경된 파일 수 등)를 보여준 뒤 그대로 이어서 작업해요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "작업 흐름",
+                    body: "시작 버튼을 누르면 → 작업 내용을 입력하면 → 브랜치가 자동 생성돼요. 이제 Claude에게 작업을 지시하면 됩니다!",
+                    example: "시작 → \"푸시 알림 기능 추가\" 입력 → dev/push-notification 브랜치 생성"
+                ),
+            ]
+        case .submitButton:
+            [
+                GuideSection(
+                    title: "제출 버튼이 하는 일",
+                    body: "작업한 내용을 정리해서 팀에 전달해요. 변경된 파일을 커밋하고, 역할에 따라 직접 머지하거나 PR(리뷰 요청)을 만들어요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "역할별 제출 방식",
+                    body: "dev 역할: 변경사항을 qa 브랜치에 직접 머지해요. 바로 반영되니까 빠르지만 책임도 커요.\ndesign/pm/po 역할: GitHub에 PR(Pull Request)을 만들어요. 개발자가 확인하고 승인하면 반영돼요.",
+                    example: "design 역할로 제출하면 → PR이 생성되고 → 링크를 Slack에 공유하면 돼요"
+                ),
+                GuideSection(
+                    title: "자동 안전장치",
+                    body: "환경변수(.env), 인증서, 빌드 설정 같은 위험한 파일은 실수로 포함되지 않도록 자동으로 제외돼요. 제외된 파일이 있으면 알려줘요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "제출 전 자동 정리",
+                    body: "제출하기 전에 변경된 코드를 자동으로 검토하고 정리해요. 중복 코드나 불필요한 부분이 있으면 수정을 제안해요.",
+                    example: nil
+                ),
+            ]
+        case .cancelButton:
+            [
+                GuideSection(
+                    title: "취소 버튼이 하는 일",
+                    body: "현재 작업 브랜치를 삭제하고 qa 브랜치로 돌아가요. 작업 내용이 모두 사라지니까 신중하게 사용해야 해요!",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "취소하면 어떻게 되나요?",
+                    body: "아직 커밋하지 않은 변경사항은 모두 사라져요. 이미 커밋한 내용도 브랜치와 함께 삭제돼요. 되돌릴 수 없으니, 취소 전에 꼭 확인 메시지가 나와요.",
+                    example: "삭제될 커밋 2개, 변경된 파일 3개가 있습니다. 정말 취소하시겠습니까?"
+                ),
+                GuideSection(
+                    title: "GitHub에 이미 올린 브랜치가 있다면?",
+                    body: "로컬 브랜치를 삭제한 후, GitHub(리모트)에도 같은 브랜치가 있으면 삭제할지 따로 물어봐요.",
+                    example: nil
+                ),
+                GuideSection(
+                    title: "언제 취소하나요?",
+                    body: "잘못된 방향으로 작업했을 때, 다른 작업을 먼저 해야 할 때, 또는 실험적으로 해본 작업이 필요 없어졌을 때 사용해요.",
+                    example: "취소 후 새 작업을 시작하려면 → 시작 버튼을 다시 누르면 돼요"
+                ),
+            ]
         }
     }
 }
@@ -302,5 +404,5 @@ struct GuideSection {
 
 #Preview {
     GitGuideView()
-        .frame(width: 700, height: 500)
+        .frame(width: 900, height: 650)
 }

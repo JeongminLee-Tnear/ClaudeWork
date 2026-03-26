@@ -53,9 +53,20 @@ struct ProjectListView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                    .font(.body)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(project.name)
+                        .font(.body)
+                        .lineLimit(1)
+
+                    if let role = appState.setup.getProjectRole(at: project.path) {
+                        Text("역할: \(role.title)")
+                            .font(.caption2)
+                            .foregroundStyle(roleForeground(role))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(roleBackground(role), in: Capsule())
+                    }
+                }
 
                 Text(truncatedPath(project.path))
                     .font(.caption)
@@ -64,6 +75,22 @@ struct ProjectListView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func roleForeground(_ role: ProjectRole) -> Color {
+        switch role {
+        case .dev: .blue
+        case .po: .orange
+        case .design: .purple
+        }
+    }
+
+    private func roleBackground(_ role: ProjectRole) -> Color {
+        switch role {
+        case .dev: .blue.opacity(0.15)
+        case .po: .orange.opacity(0.15)
+        case .design: .purple.opacity(0.15)
+        }
     }
 
     // MARK: - Helpers

@@ -5,13 +5,13 @@ struct ChatView: View {
     @Environment(AppState.self) private var appState
     @FocusState private var isInputFocused: Bool
     @State private var inputText = ""
-    @State private var showStartInput = false
-    @State private var startDescription = ""
     @State private var showStartResponse = false
     @State private var showFilePicker = false
     @State private var showSlashPopup = false
     @State private var slashSelectedIndex = 0
     @State private var slashDetailCommand: SlashCommand?
+    @State private var textPreviewAttachment: Attachment?
+    @State private var isDragOver = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,32 +70,19 @@ struct ChatView: View {
                     Text(project.name)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(ClaudeTheme.textPrimary)
+
+                    if let role = appState.setup.getProjectRole(at: project.path) {
+                        Text(role.title)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(roleColor(role))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(roleColor(role).opacity(0.12), in: Capsule())
+                    }
                 }
             }
 
             Spacer()
-
-            if let version = appState.claudeVersion {
-                Text("CLI \(version)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
-            }
-
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    appState.showMarketplace.toggle()
-                }
-            } label: {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 15))
-                    .foregroundStyle(appState.showMarketplace ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
-            }
-            .buttonStyle(.borderless)
-            .help("스킬 마켓플레이스")
-            .disabled(appState.isStreaming)
 
             Picker("", selection: Bindable(appState).selectedModel) {
                 ForEach(AppState.availableModels, id: \.self) { model in
@@ -105,83 +92,10 @@ struct ChatView: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
-
-            Button {
-                showStartInput = true
-                startDescription = ""
-            } label: {
-                Text("시작")
-            }
-            .buttonStyle(ClaudeAccentButtonStyle())
-            .disabled(appState.isStreaming)
-            .help("/start 명령 실행")
-
-            Button {
-                Task { await appState.sendSlashCommand("/submit") }
-            } label: {
-                Text("제출")
-            }
-            .buttonStyle(ClaudeSecondaryButtonStyle())
-            .disabled(appState.isStreaming)
-            .help("/submit 명령 실행")
-
-            Button {
-                appState.startNewChat()
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 14))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-            }
-            .buttonStyle(.borderless)
-            .help("새 대화")
-            .disabled(appState.isStreaming)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(ClaudeTheme.surfaceElevated)
-        .sheet(isPresented: $showStartInput) {
-            startInputSheet
-        }
-    }
-
-    // MARK: - Start Input Sheet
-
-    private var startInputSheet: some View {
-        VStack(spacing: 16) {
-            Text("작업 설명 입력")
-                .font(.headline)
-                .foregroundStyle(ClaudeTheme.textPrimary)
-
-            TextField("설명을 입력하세요...", text: $startDescription, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(3...6)
-                .frame(minWidth: 300)
-
-            HStack {
-                Button("취소") {
-                    showStartInput = false
-                }
-                .keyboardShortcut(.escape)
-                .buttonStyle(ClaudeSecondaryButtonStyle())
-
-                Spacer()
-
-                Button("시작") {
-                    let description = startDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-                    showStartInput = false
-                    if !description.isEmpty {
-                        appState.isStartMode = true
-                        showStartResponse = true
-                        Task { await appState.sendSlashCommand("/start \(description)") }
-                    }
-                }
-                .keyboardShortcut(.return)
-                .buttonStyle(ClaudeAccentButtonStyle())
-                .disabled(startDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .background(ClaudeTheme.background)
     }
 
     // MARK: - Start Response Overlay
@@ -386,7 +300,7 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // 첨부파일 미리보기
             if !appState.attachments.isEmpty {
-                attachmentChips
+                attachmentPreviews
             }
 
             // 슬래시 명령어 팝업
@@ -487,14 +401,8 @@ struct ChatView: View {
                         }
                         return .handled
                     }
-                    .onKeyPress(phases: .down) { keyPress in
-                        if keyPress.modifiers == .command,
-                           keyPress.characters == "v" {
-                            if handleClipboardPaste() {
-                                return .handled
-                            }
-                        }
-                        return .ignored
+                    .onPasteCommand(of: [.image, .fileURL, .url, .text]) { _ in
+                        handlePasteCommand()
                     }
 
                 if !showSlashPopup {
@@ -527,6 +435,22 @@ struct ChatView: View {
             .sheet(item: $slashDetailCommand) { cmd in
                 CommandDetailSheet(command: cmd)
             }
+            .sheet(item: $textPreviewAttachment) { attachment in
+                TextPreviewSheet(attachment: attachment)
+            }
+            .onDrop(of: [.fileURL, .image], isTargeted: $isDragOver) { providers in
+                processItemProviders(providers)
+                return true
+            }
+            .overlay {
+                if isDragOver {
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusPill)
+                        .strokeBorder(ClaudeTheme.accent.opacity(0.6), lineWidth: 2, antialiased: true)
+                        .background(ClaudeTheme.accent.opacity(0.05), in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusPill))
+                        .padding(.horizontal, 16)
+                        .allowsHitTesting(false)
+                }
+            }
         }
     }
 
@@ -534,60 +458,36 @@ struct ChatView: View {
         withAnimation(.easeOut(duration: 0.15)) {
             showSlashPopup = false
         }
-        inputText = ""
-        Task { await appState.sendSlashCommand(cmd.command) }
+        if cmd.acceptsInput {
+            // 입력 가능 명령어 → 인풋에 "/명령어 " 삽입하고 대기
+            inputText = cmd.command + " "
+        } else {
+            // 바로 실행
+            inputText = ""
+            Task { await appState.sendSlashCommand(cmd.command) }
+        }
     }
 
-    // MARK: - Attachment Chips
+    // MARK: - Attachment Previews
 
-    private var attachmentChips: some View {
+    private var attachmentPreviews: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 ForEach(appState.attachments) { attachment in
-                    attachmentChip(attachment)
+                    AttachmentPreviewItem(attachment: attachment) {
+                        appState.removeAttachment(attachment.id)
+                    } onTap: {
+                        if attachment.type == .text {
+                            textPreviewAttachment = attachment
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
         }
         .background(ClaudeTheme.surfaceElevated)
-    }
-
-    private func attachmentChip(_ attachment: Attachment) -> some View {
-        HStack(spacing: 6) {
-            if attachment.type == .image,
-               let thumbData = attachment.thumbnail,
-               let nsImage = NSImage(data: thumbData) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 28, height: 28)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            } else {
-                Image(systemName: attachment.type == .image ? "photo" : "doc")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.accent)
-                    .frame(width: 28, height: 28)
-            }
-
-            Text(attachment.name)
-                .font(.caption)
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .lineLimit(1)
-
-            Button {
-                appState.removeAttachment(attachment.id)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .buttonStyle(.borderless)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
     }
 
     // MARK: - Helpers
@@ -606,7 +506,7 @@ struct ChatView: View {
 
     // MARK: - Paste & File Import
 
-    private func handlePaste(_ providers: [NSItemProvider]) {
+    private func processItemProviders(_ providers: [NSItemProvider]) {
         for provider in providers {
             if provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) {
                 provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
@@ -632,28 +532,40 @@ struct ChatView: View {
         }
     }
 
-    private func handleClipboardPaste() -> Bool {
+    private func handlePasteCommand() {
         let pasteboard = NSPasteboard.general
 
+        // 이미지 처리
         if let image = NSImage(pasteboard: pasteboard) {
             if let attachment = AttachmentFactory.fromClipboardImage(image) {
                 appState.addAttachment(attachment)
-                return true
+                return
             }
         }
 
+        // 파일 URL 처리
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
+            var addedFile = false
             for url in urls where url.isFileURL {
                 if let attachment = AttachmentFactory.fromFileURL(url) {
                     appState.addAttachment(attachment)
+                    addedFile = true
                 }
             }
-            if !urls.filter(\.isFileURL).isEmpty {
-                return true
-            }
+            if addedFile { return }
         }
 
-        return false
+        // 텍스트 처리
+        if let text = pasteboard.string(forType: .string) {
+            if text.count >= AttachmentFactory.longTextThreshold {
+                // 긴 텍스트 → 첨부로
+                let attachment = AttachmentFactory.fromLongText(text)
+                appState.addAttachment(attachment)
+            } else {
+                // 짧은 텍스트 → 인풋에 삽입
+                inputText += text
+            }
+        }
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -674,6 +586,14 @@ struct ChatView: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
+        }
+    }
+
+    private func roleColor(_ role: ProjectRole) -> Color {
+        switch role {
+        case .dev: .blue
+        case .po: .orange
+        case .design: .purple
         }
     }
 }
