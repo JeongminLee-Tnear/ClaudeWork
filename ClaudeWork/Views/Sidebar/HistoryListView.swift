@@ -22,7 +22,9 @@ struct HistoryListView: View {
     private var headerRow: some View {
         HStack {
             Text("히스토리")
-                .font(.headline)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .textCase(.uppercase)
 
             Spacer()
 
@@ -30,6 +32,8 @@ struct HistoryListView: View {
                 appState.startNewChat()
             } label: {
                 Image(systemName: "square.and.pencil")
+                    .font(.system(size: 12))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .buttonStyle(.borderless)
             .help("새 채팅")
@@ -59,14 +63,15 @@ struct HistoryListView: View {
     }
 
     private func sessionRow(_ session: ChatSession) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(session.title)
-                .font(.body)
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
 
             Text(formattedDate(session.updatedAt))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundStyle(ClaudeTheme.textTertiary)
         }
         .padding(.vertical, 2)
     }
@@ -74,11 +79,14 @@ struct HistoryListView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack {
+        VStack(spacing: 8) {
             Spacer()
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 20))
+                .foregroundStyle(ClaudeTheme.textTertiary)
             Text("채팅 기록이 없습니다")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13))
+                .foregroundStyle(ClaudeTheme.textSecondary)
             Spacer()
         }
         .frame(maxWidth: .infinity)

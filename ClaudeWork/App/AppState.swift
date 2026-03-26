@@ -21,6 +21,7 @@ final class AppState {
     var isStreaming = false
     var isThinking = false
     var inputText = ""
+    var attachments: [Attachment] = []
 
     // MARK: - Start Mode
 
@@ -50,14 +51,37 @@ final class AppState {
     var gitHubUser: GitHubUser?
     var repos: [GitHubRepo] = []
 
+    // MARK: - Session Usage
+
+    var sessionCostUsd: Double = 0
+    var sessionInputTokens: Int = 0
+    var sessionOutputTokens: Int = 0
+    var sessionCacheCreationTokens: Int = 0
+    var sessionCacheReadTokens: Int = 0
+    var sessionDurationMs: Double = 0
+    var sessionTurns: Int = 0
+
     // MARK: - CLI Version
 
     var claudeVersion: String?
 
+    // MARK: - Marketplace
+
+    var showMarketplace = false
+    var marketplaceCatalog: [MarketplacePlugin] = []
+    var marketplaceLoading = false
+    var marketplaceInstalledNames: Set<String> = []
+    var marketplacePluginStates: [String: PluginInstallStatus] = [:]
+
     // MARK: - Onboarding
 
     var claudeInstalled = false
-    var onboardingCompleted = false
+    var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+
+    // MARK: - Project Role Selection
+
+    var showRoleSelection = false
+    var pendingRoleProjectURL: URL?
 
     // MARK: - Error State
 
@@ -70,6 +94,8 @@ final class AppState {
     let github = GitHubService()
     let permission = PermissionServer()
     let persistence = PersistenceService()
+    let marketplace = MarketplaceService()
+    let setup = SetupService()
 
     // MARK: - Private State
 
@@ -95,6 +121,7 @@ final class AppState {
             } catch {
                 logger.warning("Failed to fetch Claude CLI version: \(error.localizedDescription)")
             }
+
         }
 
         // Load projects from persistence
@@ -108,9 +135,17 @@ final class AppState {
             _ = await github.loadToken()
         }
 
+        // 마지막 선택된 프로젝트 복원
+        if let savedId = UserDefaults.standard.string(forKey: "selectedProjectId"),
+           let uuid = UUID(uuidString: savedId),
+           let project = projects.first(where: { $0.id == uuid }) {
+            await selectProject(project)
+        }
+
         // Check onboarding status — if CLI is installed, allow skipping onboarding
-        if claudeInstalled {
+        if claudeInstalled && !onboardingCompleted {
             onboardingCompleted = true
+            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
         }
 
         // Start permission server
@@ -138,9 +173,14 @@ final class AppState {
 
     func send() async {
         let prompt = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
+        let currentAttachments = attachments
+        guard !prompt.isEmpty || !currentAttachments.isEmpty else { return }
         inputText = ""
-        await sendPrompt(prompt)
+        attachments = []
+
+        // 첨부파일 경로를 프롬프트 앞에 삽입
+        let fullPrompt = buildPromptWithAttachments(prompt, attachments: currentAttachments)
+        await sendPrompt(fullPrompt, displayText: prompt, attachments: currentAttachments)
     }
 
     // MARK: - Send Slash Command
@@ -151,13 +191,21 @@ final class AppState {
 
     // MARK: - Shared Send Logic
 
-    private func sendPrompt(_ prompt: String) async {
+    private func sendPrompt(
+        _ prompt: String,
+        displayText: String? = nil,
+        attachments: [Attachment] = []
+    ) async {
         guard let project = selectedProject else {
             handleError(AppError.noProjectSelected)
             return
         }
 
-        messages.append(ChatMessage(role: .user, content: prompt))
+        messages.append(ChatMessage(
+            role: .user,
+            content: displayText ?? prompt,
+            attachments: attachments
+        ))
         isStreaming = true
 
         var hookSettingsPath: String?
@@ -275,6 +323,23 @@ final class AppState {
 
                         // Save session ID from result
                         self.currentSessionId = resultEvent.sessionId
+
+                        // Accumulate usage
+                        if let cost = resultEvent.totalCostUsd {
+                            self.sessionCostUsd = cost
+                        }
+                        if let duration = resultEvent.durationMs {
+                            self.sessionDurationMs += duration
+                        }
+                        if let turns = resultEvent.totalTurns {
+                            self.sessionTurns += turns
+                        }
+                        if let usage = resultEvent.usage {
+                            self.sessionInputTokens += usage.inputTokens
+                            self.sessionOutputTokens += usage.outputTokens
+                            self.sessionCacheCreationTokens += usage.cacheCreationInputTokens
+                            self.sessionCacheReadTokens += usage.cacheReadInputTokens
+                        }
 
                         if resultEvent.isError {
                             self.errorMessage = "Claude returned an error."
@@ -445,6 +510,9 @@ final class AppState {
         messages = []
         currentSessionId = project.lastSessionId
 
+        // 선택된 프로젝트 ID 저장
+        UserDefaults.standard.set(project.id.uuidString, forKey: "selectedProjectId")
+
         await loadSessionHistory()
 
         // Reuse already-loaded sessions instead of reading disk again
@@ -455,11 +523,36 @@ final class AppState {
     }
 
     func addProjectFromFolder(_ url: URL) async {
-        let name = url.lastPathComponent
-        let path = url.path
-        await addProject(name: name, path: path, gitHubRepo: nil)
+        if !setup.projectHasRole(at: url.path) {
+            pendingRoleProjectURL = url
+            showRoleSelection = true
+            return
+        }
 
-        // Auto-select the new project
+        await addAndSelectProject(name: url.lastPathComponent, path: url.path)
+    }
+
+    func completeRoleSelection(_ role: ProjectRole) async {
+        guard let url = pendingRoleProjectURL else { return }
+
+        do {
+            try setup.setProjectRole(at: url.path, role: role)
+        } catch {
+            logger.error("Failed to set project role: \(error.localizedDescription)")
+        }
+
+        showRoleSelection = false
+        pendingRoleProjectURL = nil
+        await addAndSelectProject(name: url.lastPathComponent, path: url.path)
+    }
+
+    func cancelRoleSelection() {
+        showRoleSelection = false
+        pendingRoleProjectURL = nil
+    }
+
+    private func addAndSelectProject(name: String, path: String, gitHubRepo: String? = nil) async {
+        await addProject(name: name, path: path, gitHubRepo: gitHubRepo)
         if let project = projects.last {
             await selectProject(project)
         }
@@ -503,6 +596,7 @@ final class AppState {
         gitHubUser = user
         isLoggedIn = true
         onboardingCompleted = true
+        UserDefaults.standard.set(true, forKey: "onboardingCompleted")
 
         // Cache user
         do {
@@ -523,6 +617,7 @@ final class AppState {
 
     func skipGitHubLogin() {
         onboardingCompleted = true
+        UserDefaults.standard.set(true, forKey: "onboardingCompleted")
     }
 
     var isFetchingRepos = false
@@ -551,13 +646,7 @@ final class AppState {
         // Clone the repo
         try await github.cloneRepo(repo, to: clonePath)
 
-        // Add as a project
-        await addProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName)
-
-        // Auto-select the new project
-        if let project = projects.last {
-            await selectProject(project)
-        }
+        await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName)
     }
 
     // MARK: - Cancel
@@ -609,6 +698,63 @@ final class AppState {
             do { try await persistence.saveProjects(projects) }
             catch { logger.error("Failed to save projects: \(error.localizedDescription)") }
         }
+    }
+
+    // MARK: - Marketplace
+
+    func loadMarketplace(forceRefresh: Bool = false) async {
+        marketplaceLoading = true
+        defer { marketplaceLoading = false }
+
+        async let catalog = marketplace.fetchCatalog(forceRefresh: forceRefresh)
+        async let installed = marketplace.installedSkillNames()
+
+        marketplaceCatalog = await catalog
+        marketplaceInstalledNames = await installed
+    }
+
+    func installMarketplacePlugin(_ plugin: MarketplacePlugin) async {
+        marketplacePluginStates[plugin.id] = .installing
+        do {
+            try await marketplace.installPlugin(plugin)
+            marketplacePluginStates[plugin.id] = .installed
+            marketplaceInstalledNames.insert(plugin.installName)
+            // Refresh local skills
+
+        } catch {
+            marketplacePluginStates[plugin.id] = .failed(error.localizedDescription)
+            logger.error("Failed to install plugin \(plugin.name): \(error.localizedDescription)")
+        }
+    }
+
+    func uninstallMarketplacePlugin(_ plugin: MarketplacePlugin) async {
+        do {
+            try await marketplace.uninstallPlugin(plugin)
+            marketplaceInstalledNames.remove(plugin.installName)
+            marketplacePluginStates[plugin.id] = .notInstalled
+            // Refresh local skills
+
+        } catch {
+            logger.error("Failed to uninstall plugin \(plugin.name): \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Attachment Management
+
+    func addAttachment(_ attachment: Attachment) {
+        attachments.append(attachment)
+    }
+
+    func removeAttachment(_ id: UUID) {
+        attachments.removeAll { $0.id == id }
+    }
+
+    private func buildPromptWithAttachments(_ text: String, attachments: [Attachment]) -> String {
+        guard !attachments.isEmpty else { return text }
+
+        let attachmentLines = attachments.map(\.promptContext).joined(separator: "\n")
+        let userText = text.isEmpty ? "See attached files" : text
+        return "\(attachmentLines)\n\n\(userText)"
     }
 
     // MARK: - Private Helpers
@@ -674,6 +820,7 @@ final class AppState {
         errorMessage = error.localizedDescription
         showError = true
     }
+
 }
 
 // MARK: - App Errors

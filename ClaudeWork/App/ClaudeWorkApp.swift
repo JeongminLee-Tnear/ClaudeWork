@@ -8,6 +8,7 @@ struct ClaudeWorkApp: App {
         WindowGroup {
             MainView()
                 .environment(appState)
+                .focusable(false)
                 .task {
                     await appState.initialize()
                 }

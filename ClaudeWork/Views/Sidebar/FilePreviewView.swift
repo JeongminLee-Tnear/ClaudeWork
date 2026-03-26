@@ -23,7 +23,7 @@ struct FilePreviewView: View {
                 codeContentView(content)
             }
         }
-        .frame(minWidth: 600, idealWidth: 750, minHeight: 400, idealHeight: 550)
+        .frame(minWidth: 700, idealWidth: 1000, maxWidth: 1200, minHeight: 500, idealHeight: 750, maxHeight: 900)
         .background(ClaudeTheme.background)
         .task { await loadFile() }
     }

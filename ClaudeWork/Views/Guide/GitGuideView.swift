@@ -16,6 +16,7 @@ struct GitGuideView: View {
                     .padding(24)
                     .frame(maxWidth: 600, alignment: .leading)
             }
+            .background(ClaudeTheme.background)
         }
         .frame(minWidth: 700, minHeight: 500)
     }
@@ -25,6 +26,7 @@ struct GitGuideView: View {
     private var topicList: some View {
         List(GitTopic.allCases, selection: $selectedTopic) { topic in
             Label(topic.title, systemImage: topic.icon)
+                .foregroundStyle(ClaudeTheme.textPrimary)
                 .tag(topic)
         }
         .listStyle(.sidebar)
@@ -40,13 +42,14 @@ struct GitGuideView: View {
             HStack(spacing: 12) {
                 Image(systemName: topic.icon)
                     .font(.title)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(ClaudeTheme.accent)
                 Text(topic.title)
                     .font(.title2)
                     .fontWeight(.bold)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Analogy
             analogyCard(topic.analogy)
@@ -61,20 +64,20 @@ struct GitGuideView: View {
     private func analogyCard(_ analogy: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "lightbulb.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(ClaudeTheme.accent)
                 .font(.title3)
 
             Text(analogy)
                 .font(.body)
-                .foregroundStyle(.primary)
+                .foregroundStyle(ClaudeTheme.textPrimary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.yellow.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(ClaudeTheme.accentSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.yellow.opacity(0.3), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
+                .strokeBorder(ClaudeTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -83,20 +86,21 @@ struct GitGuideView: View {
             if let title = section.title {
                 Text(title)
                     .font(.headline)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
             }
 
             Text(section.body)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             if let example = section.example {
                 HStack(spacing: 8) {
                     Rectangle()
-                        .fill(Color.accentColor.opacity(0.3))
+                        .fill(ClaudeTheme.accent.opacity(0.4))
                         .frame(width: 3)
                     Text(example)
                         .font(.callout)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                 }
                 .padding(.leading, 4)
             }

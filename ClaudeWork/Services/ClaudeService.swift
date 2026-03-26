@@ -93,6 +93,18 @@ actor ClaudeService {
         return nil
     }
 
+    // MARK: - Local Command
+
+    /// Run a local slash command (e.g. "/cost", "/usage") and return stdout.
+    func runLocalCommand(_ command: String) async throws -> String {
+        guard let binary = await findClaudeBinary() else {
+            throw ClaudeError.binaryNotFound
+        }
+
+        let output = try await runShellCommand(binary, arguments: ["-p", command, "--output-format", "text"])
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: - Version Check
 
     /// Run `claude --version` and return the version string.
@@ -103,6 +115,7 @@ actor ClaudeService {
 
         let output = try await runShellCommand(binary, arguments: ["--version"])
         let version = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s*\(Claude Code\)"#, with: "", options: .regularExpression)
 
         guard !version.isEmpty else {
             throw ClaudeError.versionCheckFailed("Empty version output")

@@ -46,6 +46,15 @@ struct UserMessage: Sendable {
     let isError: Bool
 }
 
+// MARK: - Usage Info
+
+struct UsageInfo: Sendable {
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheCreationInputTokens: Int
+    let cacheReadInputTokens: Int
+}
+
 // MARK: - Result Event
 
 struct ResultEvent: Sendable {
@@ -54,6 +63,7 @@ struct ResultEvent: Sendable {
     let sessionId: String
     let isError: Bool
     let totalTurns: Int?
+    let usage: UsageInfo?
 }
 
 // MARK: - Rate Limit Info

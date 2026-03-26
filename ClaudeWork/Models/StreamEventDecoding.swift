@@ -142,6 +142,25 @@ extension UserMessage: Decodable {
     }
 }
 
+// MARK: - UsageInfo Decodable
+
+extension UsageInfo: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case inputTokens = "input_tokens"
+        case outputTokens = "output_tokens"
+        case cacheCreationInputTokens = "cache_creation_input_tokens"
+        case cacheReadInputTokens = "cache_read_input_tokens"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.inputTokens = try container.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
+        self.outputTokens = try container.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
+        self.cacheCreationInputTokens = try container.decodeIfPresent(Int.self, forKey: .cacheCreationInputTokens) ?? 0
+        self.cacheReadInputTokens = try container.decodeIfPresent(Int.self, forKey: .cacheReadInputTokens) ?? 0
+    }
+}
+
 // MARK: - ResultEvent Decodable
 
 extension ResultEvent: Decodable {
@@ -151,6 +170,7 @@ extension ResultEvent: Decodable {
         case sessionId = "session_id"
         case isError = "is_error"
         case totalTurns = "total_turns"
+        case usage
     }
 
     init(from decoder: Decoder) throws {
@@ -160,6 +180,7 @@ extension ResultEvent: Decodable {
         self.sessionId = try container.decode(String.self, forKey: .sessionId)
         self.isError = try container.decodeIfPresent(Bool.self, forKey: .isError) ?? false
         self.totalTurns = try container.decodeIfPresent(Int.self, forKey: .totalTurns)
+        self.usage = try container.decodeIfPresent(UsageInfo.self, forKey: .usage)
     }
 }
 

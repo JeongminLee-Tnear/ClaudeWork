@@ -11,24 +11,16 @@ struct PermissionModal: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // Header
             headerSection
-
-            Divider()
-
-            // Details
+            ClaudeThemeDivider()
             detailsSection
-
             Spacer()
-
-            // Timer
             timerSection
-
-            // Buttons
             buttonSection
         }
         .padding(24)
         .frame(width: 480, height: 380)
+        .background(ClaudeTheme.surfaceElevated)
         .onReceive(timer) { _ in
             if remainingSeconds > 0 {
                 remainingSeconds -= 1
@@ -50,10 +42,12 @@ struct PermissionModal: View {
                 Text("권한 요청")
                     .font(.title3)
                     .fontWeight(.semibold)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
 
                 HStack(spacing: 6) {
                     Text(request.toolName)
                         .font(.headline)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
 
                     riskBadge
                 }
@@ -77,7 +71,6 @@ struct PermissionModal: View {
 
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Show command or file path based on tool type
             switch request.toolName.lowercased() {
             case "bash", "execute":
                 detailRow(label: "명령어", value: extractString("command"))
@@ -94,18 +87,23 @@ struct PermissionModal: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
 
             ScrollView {
                 Text(value)
                     .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 120)
             .padding(8)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(ClaudeTheme.codeBackground)
+            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
+            )
         }
     }
 
@@ -115,11 +113,11 @@ struct PermissionModal: View {
         HStack(spacing: 4) {
             Image(systemName: "clock")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textTertiary)
 
             Text("자동 거부까지 \(formattedTime)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textTertiary)
         }
     }
 
@@ -137,6 +135,7 @@ struct PermissionModal: View {
                 Task { await appState.respondToPermission(request, decision: .deny) }
             }
             .keyboardShortcut(.escape)
+            .buttonStyle(ClaudeSecondaryButtonStyle())
             .controlSize(.large)
 
             Spacer()
@@ -145,8 +144,8 @@ struct PermissionModal: View {
                 Task { await appState.respondToPermission(request, decision: .allow) }
             }
             .keyboardShortcut(.return)
+            .buttonStyle(ClaudeAccentButtonStyle())
             .controlSize(.large)
-            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -154,9 +153,9 @@ struct PermissionModal: View {
 
     private var colorForRisk: Color {
         switch request.riskLevel {
-        case .safe: return .green
-        case .moderate: return .orange
-        case .high: return .red
+        case .safe: return ClaudeTheme.statusSuccess
+        case .moderate: return ClaudeTheme.statusWarning
+        case .high: return ClaudeTheme.statusError
         }
     }
 

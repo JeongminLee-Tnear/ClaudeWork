@@ -9,7 +9,7 @@ struct ActivitySummaryView: View {
     var body: some View {
         if !activities.isEmpty {
             DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(activities) { activity in
                         activityRow(activity)
                     }
@@ -18,21 +18,21 @@ struct ActivitySummaryView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "list.clipboard")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(ClaudeTheme.accent)
                     Text("작업 요약")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Text("(\(activities.count)개)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
             .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(ClaudeTheme.surfacePrimary)
+            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
             )
         }
     }
@@ -47,12 +47,12 @@ struct ActivitySummaryView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(activity.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
 
                 Text(activity.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -60,11 +60,11 @@ struct ActivitySummaryView: View {
 
             if activity.hasError {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(ClaudeTheme.statusWarning)
                     .font(.caption)
             } else {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
                     .font(.caption)
             }
         }
@@ -174,7 +174,6 @@ struct Activity: Identifiable {
             return "파일 내용을 확인했어요"
         }
 
-        // 긴 명령어는 줄여서 표시
         if trimmed.count > 60 {
             return String(trimmed.prefix(60)) + "..."
         }
@@ -206,4 +205,5 @@ struct Activity: Identifiable {
     ])
     .padding()
     .frame(width: 400)
+    .background(ClaudeTheme.background)
 }

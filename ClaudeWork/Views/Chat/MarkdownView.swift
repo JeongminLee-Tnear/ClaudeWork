@@ -7,7 +7,7 @@ struct MarkdownContentView: View {
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(parseBlocks().enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .heading(let level, let content):
@@ -16,17 +16,21 @@ struct MarkdownContentView: View {
                     markdownText(content)
                 case .codeBlock(let language, let code):
                     CodeBlockView(language: language, code: code)
+                        .padding(.vertical, 4)
                 case .orderedListItem(let number, let content):
                     listItemView(bullet: "\(number).", content: content)
                 case .unorderedListItem(let content):
                     listItemView(bullet: "\u{2022}", content: content)
                 case .blockquote(let content):
                     blockquoteView(content)
+                case .table(let headers, let rows):
+                    MarkdownTableView(headers: headers, rows: rows)
+                        .padding(.vertical, 4)
                 case .horizontalRule:
-                    Divider()
+                    ClaudeThemeDivider()
                         .padding(.vertical, 4)
                 case .spacer:
-                    Spacer().frame(height: 4)
+                    Spacer().frame(height: 8)
                 }
             }
         }
@@ -50,13 +54,16 @@ struct MarkdownContentView: View {
             }
             .font(fontForHeading(level))
             .fontWeight(level <= 2 ? .bold : .semibold)
+            .foregroundStyle(ClaudeTheme.textPrimary)
             .textSelection(.enabled)
-            .padding(.top, level <= 2 ? 8 : 4)
-            .padding(.bottom, 2)
+            .padding(.top, level <= 2 ? 16 : 10)
+            .padding(.bottom, 4)
 
             if level <= 2 {
-                Divider()
-                    .opacity(0.4)
+                Rectangle()
+                    .fill(ClaudeTheme.border)
+                    .frame(height: 1)
+                    .opacity(0.5)
             }
         }
     }
@@ -78,7 +85,7 @@ struct MarkdownContentView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(bullet)
                 .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.accent)
                 .frame(minWidth: 16, alignment: .trailing)
 
             if let attributed = try? AttributedString(
@@ -101,8 +108,8 @@ struct MarkdownContentView: View {
 
     private func blockquoteView(_ content: String) -> some View {
         HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Color.accentColor.opacity(0.5))
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(ClaudeTheme.accent.opacity(0.6))
                 .frame(width: 3)
 
             if let attributed = try? AttributedString(
@@ -111,13 +118,13 @@ struct MarkdownContentView: View {
             ) {
                 Text(attributed)
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .textSelection(.enabled)
                     .padding(.leading, 10)
             } else {
                 Text(content)
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .textSelection(.enabled)
                     .padding(.leading, 10)
             }
@@ -153,6 +160,7 @@ struct MarkdownContentView: View {
         var inCodeBlock = false
         var codeLanguage = ""
         var codeContent = ""
+        var index = 0
 
         func flushText() {
             let trimmed = currentText.trimmingTrailingNewlines()
@@ -162,13 +170,16 @@ struct MarkdownContentView: View {
             currentText = ""
         }
 
-        for line in lines {
+        while index < lines.count {
+            let line = lines[index]
+
             // Code block handling
             if !inCodeBlock && line.hasPrefix("```") {
                 flushText()
                 inCodeBlock = true
                 codeLanguage = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 codeContent = ""
+                index += 1
                 continue
             }
 
@@ -182,6 +193,15 @@ struct MarkdownContentView: View {
                     if !codeContent.isEmpty { codeContent += "\n" }
                     codeContent += line
                 }
+                index += 1
+                continue
+            }
+
+            // Table detection: check if current line + next two lines form a table
+            if let table = parseTable(lines: lines, startIndex: index) {
+                flushText()
+                blocks.append(.table(headers: table.headers, rows: table.rows))
+                index = table.endIndex
                 continue
             }
 
@@ -189,6 +209,7 @@ struct MarkdownContentView: View {
             if let headingMatch = parseHeading(line) {
                 flushText()
                 blocks.append(.heading(level: headingMatch.level, content: headingMatch.content))
+                index += 1
                 continue
             }
 
@@ -201,6 +222,7 @@ struct MarkdownContentView: View {
                trimmedLine.filter({ $0 != " " }).count >= 3 {
                 flushText()
                 blocks.append(.horizontalRule)
+                index += 1
                 continue
             }
 
@@ -208,6 +230,7 @@ struct MarkdownContentView: View {
             if let listContent = parseUnorderedListItem(line) {
                 flushText()
                 blocks.append(.unorderedListItem(content: listContent))
+                index += 1
                 continue
             }
 
@@ -215,6 +238,7 @@ struct MarkdownContentView: View {
             if let (number, listContent) = parseOrderedListItem(line) {
                 flushText()
                 blocks.append(.orderedListItem(number: number, content: listContent))
+                index += 1
                 continue
             }
 
@@ -226,6 +250,7 @@ struct MarkdownContentView: View {
                     quoteContent = String(quoteContent.dropFirst())
                 }
                 blocks.append(.blockquote(content: quoteContent))
+                index += 1
                 continue
             }
 
@@ -235,12 +260,14 @@ struct MarkdownContentView: View {
                     flushText()
                     blocks.append(.spacer)
                 }
+                index += 1
                 continue
             }
 
             // Regular text
             if !currentText.isEmpty { currentText += "\n" }
             currentText += line
+            index += 1
         }
 
         // Handle remaining content
@@ -251,6 +278,63 @@ struct MarkdownContentView: View {
         }
 
         return blocks
+    }
+
+    // MARK: - Table Parsing
+
+    private func parseTable(lines: [String], startIndex: Int) -> (headers: [String], rows: [[String]], endIndex: Int)? {
+        guard startIndex + 1 < lines.count else { return nil }
+
+        let headerLine = lines[startIndex]
+        let separatorLine = lines[startIndex + 1]
+
+        // Header must contain pipes
+        guard headerLine.contains("|") else { return nil }
+
+        // Separator must be like |---|---| or ---|---
+        let separatorTrimmed = separatorLine.trimmingCharacters(in: .whitespaces)
+        guard isTableSeparator(separatorTrimmed) else { return nil }
+
+        let headers = parseTableRow(headerLine)
+        guard !headers.isEmpty else { return nil }
+
+        // Collect data rows
+        var rows: [[String]] = []
+        var currentIndex = startIndex + 2
+
+        while currentIndex < lines.count {
+            let rowLine = lines[currentIndex]
+            let trimmed = rowLine.trimmingCharacters(in: .whitespaces)
+
+            // Stop if empty line or non-table line
+            guard !trimmed.isEmpty, trimmed.contains("|") else { break }
+            // Skip if it's another separator line
+            guard !isTableSeparator(trimmed) else {
+                currentIndex += 1
+                continue
+            }
+
+            let cells = parseTableRow(rowLine)
+            rows.append(cells)
+            currentIndex += 1
+        }
+
+        return (headers: headers, rows: rows, endIndex: currentIndex)
+    }
+
+    private func isTableSeparator(_ line: String) -> Bool {
+        let stripped = line.replacingOccurrences(of: " ", with: "")
+        // Must contain at least one --- pattern and only |, -, :, spaces
+        guard stripped.contains("---") else { return false }
+        return stripped.allSatisfy { $0 == "|" || $0 == "-" || $0 == ":" }
+    }
+
+    private func parseTableRow(_ line: String) -> [String] {
+        var content = line.trimmingCharacters(in: .whitespaces)
+        // Remove leading/trailing pipes
+        if content.hasPrefix("|") { content = String(content.dropFirst()) }
+        if content.hasSuffix("|") { content = String(content.dropLast()) }
+        return content.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     // MARK: - Line Parsers
@@ -297,8 +381,77 @@ private enum MarkdownBlock {
     case unorderedListItem(content: String)
     case orderedListItem(number: Int, content: String)
     case blockquote(content: String)
+    case table(headers: [String], rows: [[String]])
     case horizontalRule
     case spacer
+}
+
+// MARK: - Table View
+
+private struct MarkdownTableView: View {
+    let headers: [String]
+    let rows: [[String]]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                // Header row
+                GridRow {
+                    ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
+                        cellView(text: header, isHeader: true)
+                    }
+                }
+                .background(ClaudeTheme.surfaceTertiary)
+
+                // Separator
+                GridRow {
+                    Rectangle()
+                        .fill(ClaudeTheme.border)
+                        .frame(height: 1)
+                        .gridCellColumns(headers.count)
+                }
+
+                // Data rows
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                    GridRow {
+                        ForEach(Array(headers.indices), id: \.self) { colIndex in
+                            let text = colIndex < row.count ? row[colIndex] : ""
+                            cellView(text: text, isHeader: false)
+                        }
+                    }
+                    .background(rowIndex % 2 == 0 ? Color.clear : ClaudeTheme.surfaceTertiary.opacity(0.4))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                    .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
+            )
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func cellView(text: String, isHeader: Bool) -> some View {
+        Group {
+            if let attributed = try? AttributedString(
+                markdown: text,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            ) {
+                Text(attributed)
+                    .font(.system(size: 13, weight: isHeader ? .semibold : .regular))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .textSelection(.enabled)
+            } else {
+                Text(text)
+                    .font(.system(size: 13, weight: isHeader ? .semibold : .regular))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minWidth: 80, maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 // MARK: - Code Block View
@@ -311,45 +464,40 @@ struct CodeBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            if !language.isEmpty {
-                HStack {
+            HStack {
+                if !language.isEmpty {
                     Text(language)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    copyButton
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-            } else {
-                HStack {
-                    Spacer()
-                    copyButton
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+
+                Spacer()
+
+                copyButton
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(ClaudeTheme.codeHeaderBackground)
 
-            Divider()
+            Rectangle()
+                .fill(ClaudeTheme.border)
+                .frame(height: 0.5)
 
             // Code content
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 14, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(ClaudeTheme.codeBackground)
+        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
         )
     }
 
@@ -368,7 +516,7 @@ struct CodeBlockView: View {
                 Text(isCopied ? "복사됨" : "복사")
                     .font(.caption2)
             }
-            .foregroundStyle(isCopied ? .green : .secondary)
+            .foregroundStyle(isCopied ? ClaudeTheme.statusSuccess : ClaudeTheme.textTertiary)
         }
         .buttonStyle(.plain)
     }
@@ -410,6 +558,12 @@ private extension String {
 
         ---
 
+        | 항목 | 수치 |
+        |------|------|
+        | Swift 파일 | 381개 |
+        | 총 코드 라인 | ~55,000줄 |
+        | SwiftUI : UIKit 비율 | 87% : 13% |
+
         ```swift
         func hello() {
             print("Hello, World!")
@@ -421,4 +575,5 @@ private extension String {
         .padding()
     }
     .frame(width: 500, height: 600)
+    .background(ClaudeTheme.background)
 }

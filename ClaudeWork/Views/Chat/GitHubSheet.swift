@@ -13,19 +13,21 @@ struct GitHubSheet: View {
             HStack {
                 Text("GitHub")
                     .font(.headline)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
 
                 Spacer()
 
                 if appState.isLoggedIn, let user = appState.gitHubUser {
                     Text("@\(user.login)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
 
                     Button {
                         Task { await appState.fetchRepos() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(.caption)
+                            .foregroundStyle(ClaudeTheme.textSecondary)
                     }
                     .buttonStyle(.borderless)
                     .focusable(false)
@@ -37,14 +39,14 @@ struct GitHubSheet: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .buttonStyle(.borderless)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Content
             if appState.isLoggedIn {
@@ -54,6 +56,7 @@ struct GitHubSheet: View {
             }
         }
         .frame(width: 480, height: 520)
+        .background(ClaudeTheme.background)
         .focusable(false)
         .task {
             if appState.isLoggedIn, appState.repos.isEmpty {
@@ -73,11 +76,11 @@ struct GitHubSheet: View {
 
             Image(systemName: "link.badge.plus")
                 .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.accent)
 
             Text("GitHub에 연결하면\n레포를 바로 가져올 수 있어요")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -85,8 +88,7 @@ struct GitHubSheet: View {
             } label: {
                 Label("GitHub 연동", systemImage: "person.crop.circle.badge.plus")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(ClaudeAccentButtonStyle())
 
             Spacer()
         }
@@ -100,16 +102,17 @@ struct GitHubSheet: View {
             // Search bar
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                 TextField("레포 검색...", text: $searchText)
                     .textFieldStyle(.plain)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
             }
             .padding(8)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
 
-            Divider()
+            ClaudeThemeDivider()
 
             if appState.isFetchingRepos {
                 loadingState
@@ -119,14 +122,14 @@ struct GitHubSheet: View {
                 repoListContent
             }
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Footer
             HStack {
                 Link("조직 레포가 안 보이나요? →",
                      destination: URL(string: "https://github.com/settings/connections/applications/\(GitHubService.oauthClientId)")!)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
 
                 Spacer()
             }
@@ -142,7 +145,7 @@ struct GitHubSheet: View {
                 .controlSize(.regular)
             Text("레포를 불러오는 중...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -153,7 +156,7 @@ struct GitHubSheet: View {
             Spacer()
             Text("레포가 없습니다")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -170,16 +173,17 @@ struct GitHubSheet: View {
         HStack(spacing: 10) {
             Image(systemName: repo.isPrivate ? "lock.fill" : "globe")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textTertiary)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(repo.name)
                     .font(.body)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(1)
                 Text(repo.fullName)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                     .lineLimit(1)
             }
 
@@ -191,7 +195,7 @@ struct GitHubSheet: View {
             } else if isAlreadyAdded(repo) {
                 Label("추가됨", systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ClaudeTheme.statusSuccess)
             } else {
                 Button {
                     Task { await cloneRepo(repo) }
@@ -199,8 +203,7 @@ struct GitHubSheet: View {
                     Label("추가", systemImage: "plus.circle")
                         .font(.caption)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(ClaudeSecondaryButtonStyle())
             }
         }
         .padding(.vertical, 2)

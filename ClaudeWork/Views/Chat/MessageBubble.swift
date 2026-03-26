@@ -6,10 +6,15 @@ struct MessageBubble: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             if message.role == .user {
-                Spacer(minLength: 60)
+                Spacer(minLength: 80)
             }
 
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+                // 첨부파일 표시
+                if !message.attachmentPaths.isEmpty {
+                    attachmentPreview
+                }
+
                 // Text content
                 if !message.content.isEmpty {
                     textBubble
@@ -27,7 +32,7 @@ struct MessageBubble: View {
             }
 
             if message.role == .assistant {
-                Spacer(minLength: 60)
+                Spacer(minLength: 40)
             }
         }
     }
@@ -38,56 +43,80 @@ struct MessageBubble: View {
     private var textBubble: some View {
         if message.role == .user {
             Text(message.content)
-                .font(.body)
-                .foregroundStyle(.white)
+                .font(.system(size: 14))
+                .foregroundStyle(ClaudeTheme.userBubbleText)
                 .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(bubbleBackground, in: bubbleShape)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(ClaudeTheme.userBubble, in: bubbleShape)
                 .accessibilityLabel("내 메시지: \(message.content)")
         } else {
             MarkdownContentView(text: message.content)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(bubbleBackground, in: bubbleShape)
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(ClaudeTheme.assistantBubble, in: bubbleShape)
+                .overlay(
+                    bubbleShape
+                        .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
+                )
                 .accessibilityLabel("어시스턴트: \(message.content)")
-        }
-    }
-
-    private var bubbleBackground: some ShapeStyle {
-        if message.role == .user {
-            return AnyShapeStyle(Color.accentColor)
-        } else {
-            return AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
         }
     }
 
     private var bubbleShape: UnevenRoundedRectangle {
         if message.role == .user {
             return UnevenRoundedRectangle(
-                topLeadingRadius: 12,
-                bottomLeadingRadius: 12,
+                topLeadingRadius: ClaudeTheme.cornerRadiusLarge,
+                bottomLeadingRadius: ClaudeTheme.cornerRadiusLarge,
                 bottomTrailingRadius: 4,
-                topTrailingRadius: 12
+                topTrailingRadius: ClaudeTheme.cornerRadiusLarge
             )
         } else {
             return UnevenRoundedRectangle(
-                topLeadingRadius: 12,
+                topLeadingRadius: ClaudeTheme.cornerRadiusLarge,
                 bottomLeadingRadius: 4,
-                bottomTrailingRadius: 12,
-                topTrailingRadius: 12
+                bottomTrailingRadius: ClaudeTheme.cornerRadiusLarge,
+                topTrailingRadius: ClaudeTheme.cornerRadiusLarge
             )
+        }
+    }
+
+    // MARK: - Attachment Preview
+
+    private var attachmentPreview: some View {
+        HStack(spacing: 6) {
+            ForEach(message.attachmentPaths, id: \.path) { info in
+                HStack(spacing: 4) {
+                    if info.isImage, let nsImage = NSImage(contentsOfFile: info.path) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 40, height: 40)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
+                        Image(systemName: info.isImage ? "photo" : "doc")
+                            .font(.system(size: 14))
+                            .foregroundStyle(ClaudeTheme.accent)
+                    }
+                    Text(info.name)
+                        .font(.caption)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                .padding(6)
+                .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            }
         }
     }
 
     // MARK: - Streaming Indicator
 
     private var pulsingDot: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             ForEach(0..<3) { index in
                 Circle()
-                    .fill(Color.secondary)
+                    .fill(ClaudeTheme.accent)
                     .frame(width: 6, height: 6)
                     .opacity(0.4)
                     .animation(
@@ -98,9 +127,9 @@ struct MessageBubble: View {
                     )
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
     }
 }
 
@@ -112,4 +141,5 @@ struct MessageBubble: View {
     }
     .padding()
     .frame(width: 500)
+    .background(ClaudeTheme.background)
 }

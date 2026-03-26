@@ -9,18 +9,18 @@ struct GitHubLoginView: View {
     @State private var errorMessage: String?
     @State private var codeCopied = false
 
-    /// When used as a sheet, this dismisses it
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.accent)
 
             Text("GitHub 연동")
                 .font(.title2)
                 .fontWeight(.semibold)
+                .foregroundStyle(ClaudeTheme.textPrimary)
 
             if appState.isLoggedIn {
                 authenticatedView
@@ -33,12 +33,13 @@ struct GitHubLoginView: View {
             if let error = errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ClaudeTheme.statusError)
                     .multilineTextAlignment(.center)
             }
         }
         .padding(24)
         .frame(width: 480, height: 400)
+        .background(ClaudeTheme.background)
     }
 
     // MARK: - Start View
@@ -47,7 +48,7 @@ struct GitHubLoginView: View {
         VStack(spacing: 12) {
             Text("GitHub에 연결하면 레포 목록을 가져오고 원클릭으로 프로젝트를 추가할 수 있습니다.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ClaudeTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -55,7 +56,7 @@ struct GitHubLoginView: View {
             } label: {
                 Label("GitHub로 로그인", systemImage: "arrow.right.circle")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(ClaudeAccentButtonStyle())
             .disabled(isStarting)
 
             if isStarting {
@@ -72,11 +73,12 @@ struct GitHubLoginView: View {
             VStack(spacing: 6) {
                 Text("인증 코드")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
 
                 Text(code)
                     .font(.system(.title, design: .monospaced))
                     .fontWeight(.bold)
+                    .foregroundStyle(ClaudeTheme.accent)
                     .textSelection(.enabled)
             }
 
@@ -92,7 +94,7 @@ struct GitHubLoginView: View {
                     Label(codeCopied ? "복사됨" : "코드 복사",
                           systemImage: codeCopied ? "checkmark" : "doc.on.doc")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ClaudeSecondaryButtonStyle())
 
                 Button {
                     if let url = verificationURL.flatMap({ URL(string: $0) }) {
@@ -101,7 +103,7 @@ struct GitHubLoginView: View {
                 } label: {
                     Label("GitHub에서 인증하기", systemImage: "safari")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ClaudeAccentButtonStyle())
             }
 
             if isPolling {
@@ -110,7 +112,7 @@ struct GitHubLoginView: View {
                         .controlSize(.small)
                     Text("인증 대기 중...")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
         }
@@ -121,19 +123,19 @@ struct GitHubLoginView: View {
     private var authenticatedView: some View {
         VStack(spacing: 12) {
             Label("연동 완료", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(ClaudeTheme.statusSuccess)
                 .font(.title3)
 
             if let user = appState.gitHubUser {
                 Text("@\(user.login)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
             }
 
             Button("닫기") {
                 dismiss()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(ClaudeSecondaryButtonStyle())
         }
     }
 
@@ -149,7 +151,6 @@ struct GitHubLoginView: View {
             verificationURL = response.verificationUri
             isStarting = false
 
-            // Start polling
             isPolling = true
             try await appState.completeGitHubLogin(
                 deviceCode: response.deviceCode,
@@ -157,7 +158,6 @@ struct GitHubLoginView: View {
             )
             isPolling = false
 
-            // Load repos after login
             await appState.fetchRepos()
         } catch {
             isStarting = false

@@ -19,12 +19,11 @@ struct WebPreviewButton: View {
                     Text("결과 보기")
                     Text(url.absoluteString)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 .font(.subheadline)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            .buttonStyle(ClaudeAccentButtonStyle())
             .sheet(isPresented: $showPreview) {
                 if let url = previewURL {
                     WebPreviewSheet(url: url)
@@ -33,10 +32,8 @@ struct WebPreviewButton: View {
         }
     }
 
-    /// 메시지에서 localhost URL을 자동 감지
     private var detectedURL: URL? {
         let allText = messages.map { $0.content }.joined(separator: "\n")
-        // localhost 또는 127.0.0.1 URL 패턴
         let pattern = #"https?://(?:localhost|127\.0\.0\.1):\d{2,5}[/\w.-]*"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: allText, range: NSRange(allText.startIndex..., in: allText)),
@@ -59,11 +56,11 @@ struct WebPreviewSheet: View {
             // Header
             HStack {
                 Image(systemName: "globe")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(ClaudeTheme.accent)
 
                 Text(url.absoluteString)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(1)
 
                 Spacer()
@@ -77,6 +74,7 @@ struct WebPreviewSheet: View {
                     NSWorkspace.shared.open(url)
                 } label: {
                     Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
                 .buttonStyle(.borderless)
                 .help("브라우저에서 열기")
@@ -85,14 +83,16 @@ struct WebPreviewSheet: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .buttonStyle(.borderless)
                 .help("닫기")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .background(ClaudeTheme.surfaceElevated)
 
-            Divider()
+            ClaudeThemeDivider()
 
             // Web View
             WebViewWrapper(url: url, isLoading: $isLoading)

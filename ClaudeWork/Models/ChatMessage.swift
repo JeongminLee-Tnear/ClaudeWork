@@ -9,6 +9,7 @@ struct ChatMessage: Identifiable, Codable, Sendable {
     var toolCalls: [ToolCall]
     var isStreaming: Bool
     let timestamp: Date
+    var attachmentPaths: [AttachmentInfo]
 
     init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ struct ChatMessage: Identifiable, Codable, Sendable {
         content: String = "",
         toolCalls: [ToolCall] = [],
         isStreaming: Bool = false,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        attachments: [Attachment] = []
     ) {
         self.id = id
         self.role = role
@@ -24,7 +26,20 @@ struct ChatMessage: Identifiable, Codable, Sendable {
         self.toolCalls = toolCalls
         self.isStreaming = isStreaming
         self.timestamp = timestamp
+        self.attachmentPaths = attachments.map {
+            AttachmentInfo(name: $0.name, path: $0.path, type: $0.type.rawValue)
+        }
     }
+}
+
+// MARK: - Attachment Info (Codable, for persistence)
+
+struct AttachmentInfo: Codable, Sendable {
+    let name: String
+    let path: String
+    let type: String
+
+    var isImage: Bool { type == "image" }
 }
 
 // MARK: - Role
