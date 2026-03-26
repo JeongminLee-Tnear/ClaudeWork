@@ -522,7 +522,6 @@ struct ChatView: View {
             .padding(.top, 10)
             .padding(.bottom, 6)
         }
-        .background(ClaudeTheme.surfaceElevated)
     }
 
     // MARK: - Helpers
