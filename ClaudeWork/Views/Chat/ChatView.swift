@@ -12,6 +12,8 @@ struct ChatView: View {
     @State private var textPreviewAttachment: Attachment?
     @State private var isDragOver = false
     @State private var lastPasteChangeCount = 0
+    @State private var showAtFilePopup = false
+    @State private var atFileSelectedIndex = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -292,6 +294,21 @@ struct ChatView: View {
         SlashCommandRegistry.filtered(by: slashQuery)
     }
 
+    /// 마지막 `@` 이후 텍스트를 쿼리로 추출. @ 뒤에 공백 없이 타이핑 중일 때만 반환.
+    private var atFileQuery: String {
+        let text = appState.inputText
+        guard let atRange = text.range(of: "@", options: .backwards) else { return "" }
+        let afterAt = String(text[atRange.upperBound...])
+        // 공백이 있으면 이미 선택 완료된 것
+        if afterAt.contains(" ") { return "" }
+        return afterAt
+    }
+
+    private var atFileFilteredEntries: [AtFileEntry] {
+        guard let project = appState.selectedProject else { return [] }
+        return AtFileSearch.search(query: atFileQuery, projectPath: project.path)
+    }
+
     private var inputBar: some View {
         VStack(spacing: 0) {
             // 첨부파일 미리보기
@@ -307,6 +324,19 @@ struct ChatView: View {
                         selectSlashCommand(cmd)
                     },
                     selectedIndex: $slashSelectedIndex
+                )
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // @ 파일 검색 팝업
+            if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                AtFilePopup(
+                    entries: atFileFilteredEntries,
+                    onSelect: { relativePath in
+                        selectAtFile(relativePath)
+                    },
+                    selectedIndex: $atFileSelectedIndex
                 )
                 .padding(.horizontal, 16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -351,12 +381,21 @@ struct ChatView: View {
                         }
 
                         let trimmed = newValue.trimmingCharacters(in: .whitespaces)
-                        let shouldShow = trimmed.hasPrefix("/") && !trimmed.contains(" ")
+                        let shouldShowSlash = trimmed.hasPrefix("/") && !trimmed.contains(" ")
                         withAnimation(.easeOut(duration: 0.15)) {
-                            showSlashPopup = shouldShow
+                            showSlashPopup = shouldShowSlash
                         }
-                        if shouldShow {
+                        if shouldShowSlash {
                             slashSelectedIndex = 0
+                        }
+
+                        // @ 파일 검색 감지
+                        let shouldShowAt = !shouldShowSlash && hasActiveAtQuery(in: newValue)
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            showAtFilePopup = shouldShowAt
+                        }
+                        if shouldShowAt {
+                            atFileSelectedIndex = 0
                         }
                     }
                     .onKeyPress(.return, phases: .down) { keyPress in
@@ -367,15 +406,21 @@ struct ChatView: View {
                             let commands = slashFilteredCommands
                             if slashSelectedIndex < commands.count {
                                 if keyPress.modifiers.contains(.command) {
-                                    // Cmd+Enter → 상세 설명 표시
                                     let cmd = commands[slashSelectedIndex]
                                     if cmd.detailDescription != nil {
                                         slashDetailCommand = cmd
                                     }
                                 } else {
-                                    // Enter → 명령어 실행
                                     selectSlashCommand(commands[slashSelectedIndex])
                                 }
+                            }
+                            return .handled
+                        }
+                        // @ 파일 팝업에서 Enter → 경로 삽입
+                        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                            let entries = atFileFilteredEntries
+                            if atFileSelectedIndex < entries.count {
+                                selectAtFile(entries[atFileSelectedIndex].relativePath)
                             }
                             return .handled
                         }
@@ -383,18 +428,35 @@ struct ChatView: View {
                         return .handled
                     }
                     .onKeyPress(.upArrow, phases: .down) { _ in
+                        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                            let count = atFileFilteredEntries.count
+                            atFileSelectedIndex = (atFileSelectedIndex - 1 + count) % count
+                            return .handled
+                        }
                         guard showSlashPopup && !slashFilteredCommands.isEmpty else { return .ignored }
                         let count = slashFilteredCommands.count
                         slashSelectedIndex = (slashSelectedIndex - 1 + count) % count
                         return .handled
                     }
                     .onKeyPress(.downArrow, phases: .down) { _ in
+                        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                            let count = atFileFilteredEntries.count
+                            atFileSelectedIndex = (atFileSelectedIndex + 1) % count
+                            return .handled
+                        }
                         guard showSlashPopup && !slashFilteredCommands.isEmpty else { return .ignored }
                         let count = slashFilteredCommands.count
                         slashSelectedIndex = (slashSelectedIndex + 1) % count
                         return .handled
                     }
                     .onKeyPress(.tab, phases: .down) { _ in
+                        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                            let entries = atFileFilteredEntries
+                            if atFileSelectedIndex < entries.count {
+                                selectAtFile(entries[atFileSelectedIndex].relativePath)
+                            }
+                            return .handled
+                        }
                         guard showSlashPopup && !slashFilteredCommands.isEmpty else { return .ignored }
                         let commands = slashFilteredCommands
                         if slashSelectedIndex < commands.count {
@@ -403,6 +465,12 @@ struct ChatView: View {
                         return .handled
                     }
                     .onKeyPress(.escape, phases: .down) { _ in
+                        if showAtFilePopup {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                showAtFilePopup = false
+                            }
+                            return .handled
+                        }
                         guard showSlashPopup else { return .ignored }
                         withAnimation(.easeOut(duration: 0.15)) {
                             showSlashPopup = false
@@ -436,7 +504,6 @@ struct ChatView: View {
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(ClaudeTheme.surfaceElevated)
             .sheet(item: $slashDetailCommand) { cmd in
                 CommandDetailSheet(command: cmd)
             }
@@ -470,6 +537,27 @@ struct ChatView: View {
             appState.inputText = ""
             Task { await appState.sendSlashCommand(cmd.command) }
         }
+    }
+
+    // MARK: - @ File Selection
+
+    private func selectAtFile(_ relativePath: String) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            showAtFilePopup = false
+        }
+        // 마지막 @ 이후 텍스트를 경로로 교체
+        var text = appState.inputText
+        if let atRange = text.range(of: "@", options: .backwards) {
+            text.replaceSubrange(atRange.lowerBound..., with: "@\(relativePath) ")
+        }
+        appState.inputText = text
+    }
+
+    private func hasActiveAtQuery(in text: String) -> Bool {
+        guard let atRange = text.range(of: "@", options: .backwards) else { return false }
+        let afterAt = String(text[atRange.upperBound...])
+        // 공백이 있으면 이미 선택 완료
+        return !afterAt.contains(" ")
     }
 
     // MARK: - Attachment Previews
