@@ -31,7 +31,7 @@ struct SkillMarketView: View {
         .sheet(item: $selectedPlugin) { plugin in
             PluginDetailView(
                 plugin: plugin,
-                isInstalled: appState.marketplaceInstalledNames.contains(plugin.installName),
+                isInstalled: appState.marketplaceInstalledNames.contains(plugin.name),
                 installStatus: appState.marketplacePluginStates[plugin.id] ?? .notInstalled,
                 onInstall: {
                     Task { await appState.installMarketplacePlugin(plugin) }
@@ -110,8 +110,8 @@ struct SkillMarketView: View {
                     filterChip("전체")
                     filterChip("설치됨")
 
-                    ForEach(availableTags, id: \.self) { tag in
-                        filterChip(tag)
+                    ForEach(availableCategories, id: \.self) { cat in
+                        filterChip(cat)
                     }
                 }
             }
@@ -167,7 +167,7 @@ struct SkillMarketView: View {
                         ForEach(filteredPlugins) { plugin in
                             PluginCard(
                                 plugin: plugin,
-                                isInstalled: appState.marketplaceInstalledNames.contains(plugin.installName),
+                                isInstalled: appState.marketplaceInstalledNames.contains(plugin.name),
                                 installStatus: appState.marketplacePluginStates[plugin.id] ?? .notInstalled
                             )
                             .onTapGesture {
@@ -187,9 +187,9 @@ struct SkillMarketView: View {
         var plugins = appState.marketplaceCatalog
 
         if selectedFilter == "설치됨" {
-            plugins = plugins.filter { appState.marketplaceInstalledNames.contains($0.installName) }
+            plugins = plugins.filter { appState.marketplaceInstalledNames.contains($0.name) }
         } else if selectedFilter != "전체" {
-            plugins = plugins.filter { $0.tags.contains(selectedFilter) || $0.categoryLabel == selectedFilter }
+            plugins = plugins.filter { $0.categoryLabel == selectedFilter || $0.marketplace == selectedFilter }
         }
 
         if !searchText.isEmpty {
@@ -197,25 +197,20 @@ struct SkillMarketView: View {
             plugins = plugins.filter {
                 $0.name.lowercased().contains(query) ||
                 $0.description.lowercased().contains(query) ||
-                $0.tags.joined(separator: " ").lowercased().contains(query) ||
-                $0.author.lowercased().contains(query)
+                $0.author.lowercased().contains(query) ||
+                $0.category.lowercased().contains(query)
             }
         }
 
         return plugins
     }
 
-    private var availableTags: [String] {
-        var tagCounts: [String: Int] = [:]
+    private var availableCategories: [String] {
+        var categoryCounts: [String: Int] = [:]
         for plugin in appState.marketplaceCatalog {
-            for tag in plugin.tags {
-                tagCounts[tag, default: 0] += 1
-            }
+            categoryCounts[plugin.categoryLabel, default: 0] += 1
         }
-        for plugin in appState.marketplaceCatalog {
-            tagCounts[plugin.categoryLabel, default: 0] += 1
-        }
-        return tagCounts.sorted { $0.value > $1.value }.map(\.key).prefix(8).map { $0 }
+        return Array(categoryCounts.sorted { $0.value > $1.value }.prefix(8).map(\.key))
     }
 }
 
@@ -240,15 +235,13 @@ struct PluginCard: View {
                     .background(ClaudeTheme.accentSubtle)
                     .clipShape(Capsule())
 
-                ForEach(plugin.tags.prefix(2), id: \.self) { tag in
-                    Text(tag)
-                        .font(.system(size: 10))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(ClaudeTheme.surfaceTertiary)
-                        .clipShape(Capsule())
-                }
+                Text(plugin.marketplace)
+                    .font(.system(size: 10))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(ClaudeTheme.surfaceTertiary)
+                    .clipShape(Capsule())
 
                 Spacer()
             }
@@ -374,7 +367,7 @@ struct PluginDetailView: View {
             // 내용
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // 카테고리 + 태그
+                    // 카테고리
                     HStack(spacing: 6) {
                         Text(plugin.categoryLabel)
                             .font(.system(size: 11, weight: .medium))
@@ -384,15 +377,13 @@ struct PluginDetailView: View {
                             .background(ClaudeTheme.accentSubtle)
                             .clipShape(Capsule())
 
-                        ForEach(plugin.tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.system(size: 11))
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(ClaudeTheme.surfaceSecondary)
-                                .clipShape(Capsule())
-                        }
+                        Text(plugin.sourceType.rawValue)
+                            .font(.system(size: 11))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(ClaudeTheme.surfaceSecondary)
+                            .clipShape(Capsule())
                     }
 
                     // 이름
@@ -411,22 +402,22 @@ struct PluginDetailView: View {
                     // 정보 그리드
                     Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                         infoRow(label: "작성자", value: plugin.author)
-                        infoRow(label: "버전", value: plugin.version)
-                        infoRow(label: "저장소", value: plugin.repo)
-                        infoRow(label: "경로", value: plugin.sourcePath)
-                        infoRow(label: "유형", value: plugin.isSkillMd ? "SKILL.md 스킬" : "CLI 플러그인")
+                        infoRow(label: "마켓", value: plugin.marketplace)
+                        infoRow(label: "카테고리", value: plugin.categoryLabel)
+                        if !plugin.homepage.isEmpty {
+                            infoRow(label: "홈페이지", value: plugin.homepage)
+                        }
                     }
 
                     ClaudeThemeDivider()
 
-                    // 설치 경로 안내
+                    // 설치 명령어 안내
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("설치 위치")
+                        Text("설치 명령어")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(ClaudeTheme.textPrimary)
 
-                        let home = FileManager.default.homeDirectoryForCurrentUser.path
-                        Text("\(home)/.claude/skills/\(plugin.installName)/")
+                        Text(plugin.installCommand)
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                             .padding(10)

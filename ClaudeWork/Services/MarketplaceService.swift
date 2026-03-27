@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// Fetches the marketplace catalog from Anthropic's GitHub repositories
-/// and handles skill installation/uninstallation.
+/// and handles plugin installation/uninstallation via Claude Code CLI.
 actor MarketplaceService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "MarketplaceService")
@@ -12,8 +12,9 @@ actor MarketplaceService {
     private var cacheDate: Date?
     private let cacheTTL: TimeInterval = 300 // 5 minutes
 
-    /// Source repositories to scan for plugins.
-    private static let sourceRepos: [(owner: String, repo: String, category: String)] = [
+    /// Source repositories to scan.
+    private static let sourceRepos: [(owner: String, repo: String, defaultCategory: String)] = [
+        ("anthropics", "claude-plugins-official", "official"),
         ("anthropics", "skills", "agent-skills"),
         ("anthropics", "knowledge-work-plugins", "knowledge-work"),
         ("anthropics", "financial-services-plugins", "financial-services"),
@@ -21,7 +22,6 @@ actor MarketplaceService {
 
     // MARK: - Fetch Catalog
 
-    /// Fetch the full marketplace catalog, using cache when available.
     func fetchCatalog(forceRefresh: Bool = false) async -> [MarketplacePlugin] {
         if !forceRefresh,
            let cacheDate,
@@ -38,7 +38,7 @@ actor MarketplaceService {
                     await self.fetchRepoPlugins(
                         owner: source.owner,
                         repo: source.repo,
-                        category: source.category
+                        defaultCategory: source.defaultCategory
                     )
                 }
             }
@@ -56,257 +56,167 @@ actor MarketplaceService {
         return allPlugins
     }
 
-    /// Fetch plugins from a single repository.
-    private func fetchRepoPlugins(owner: String, repo: String, category: String) async -> [MarketplacePlugin] {
-        // Try to fetch the marketplace.json catalog first
-        let catalogURL = "https://raw.githubusercontent.com/\(owner)/\(repo)/main/.claude-plugin/marketplace.json"
+    // MARK: - Fetch Repository
 
+    private func fetchRepoPlugins(owner: String, repo: String, defaultCategory: String) async -> [MarketplacePlugin] {
+        let catalogURL = "https://raw.githubusercontent.com/\(owner)/\(repo)/main/.claude-plugin/marketplace.json"
         guard let url = URL(string: catalogURL) else { return [] }
 
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                // Fallback: scan the repo tree for SKILL.md files
-                return await scanRepoTree(owner: owner, repo: repo, category: category)
+                return []
             }
-
-            return parseMarketplaceCatalog(data: data, owner: owner, repo: repo, category: category)
+            return parseMarketplaceCatalog(data: data, owner: owner, repo: repo, defaultCategory: defaultCategory)
         } catch {
             logger.warning("Failed to fetch catalog from \(owner)/\(repo): \(error.localizedDescription)")
-            return await scanRepoTree(owner: owner, repo: repo, category: category)
+            return []
         }
     }
 
-    /// Parse a marketplace.json catalog file.
-    private func parseMarketplaceCatalog(data: Data, owner: String, repo: String, category: String) -> [MarketplacePlugin] {
+    // MARK: - Parse Catalog
+
+    private func parseMarketplaceCatalog(data: Data, owner: String, repo: String, defaultCategory: String) -> [MarketplacePlugin] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let marketplaceName = json["name"] as? String,
               let plugins = json["plugins"] as? [[String: Any]] else {
             return []
         }
 
+        let ownerInfo = json["owner"] as? [String: Any]
+        let defaultAuthor = ownerInfo?["name"] as? String ?? owner
+
         return plugins.compactMap { entry -> MarketplacePlugin? in
             guard let name = entry["name"] as? String else { return nil }
+
             let description = entry["description"] as? String ?? ""
-            let version = entry["version"] as? String ?? "1.0.0"
-            let author = entry["author"] as? String ?? owner
-            let sourcePath = entry["path"] as? String ?? name
-            let installName = entry["installName"] as? String ?? name
-            let tags = entry["tags"] as? [String] ?? []
-            let isSkillMd = entry["isSkillMd"] as? Bool ?? true
+            let category = entry["category"] as? String ?? defaultCategory
+            let homepage = entry["homepage"] as? String ?? ""
+
+            // author: 문자열 또는 { "name": "..." } 객체
+            let author: String
+            if let authorDict = entry["author"] as? [String: Any] {
+                author = authorDict["name"] as? String ?? defaultAuthor
+            } else if let authorStr = entry["author"] as? String {
+                author = authorStr
+            } else {
+                author = defaultAuthor
+            }
+
+            // source 파싱: 문자열(로컬 경로) 또는 객체(url/git-subdir)
+            let sourceType: MarketplacePlugin.SourceType
+            let skillPaths: [String]
+
+            if let skills = entry["skills"] as? [String], !skills.isEmpty {
+                // skills 저장소: 번들 형태
+                sourceType = .skillsBundle
+                skillPaths = skills
+            } else if let sourceDict = entry["source"] as? [String: Any] {
+                // 객체 형태: {"source": "url", "url": "..."} 또는 {"source": "git-subdir", ...}
+                let sourceStr = sourceDict["source"] as? String ?? "url"
+                sourceType = MarketplacePlugin.SourceType(rawValue: sourceStr) ?? .url
+                skillPaths = []
+            } else {
+                // 문자열 형태: "./plugins/name" 등 로컬 경로
+                sourceType = .local
+                skillPaths = []
+            }
 
             return MarketplacePlugin(
                 name: name,
                 description: description,
-                version: version,
                 author: author,
-                repo: "\(owner)/\(repo)",
-                sourcePath: sourcePath,
-                installName: installName,
                 category: category,
-                tags: tags,
-                isSkillMd: isSkillMd
+                homepage: homepage,
+                marketplace: marketplaceName,
+                sourceType: sourceType,
+                skillPaths: skillPaths
             )
         }
     }
 
-    /// Fallback: scan the repo tree via GitHub API for SKILL.md files.
-    private func scanRepoTree(owner: String, repo: String, category: String) async -> [MarketplacePlugin] {
-        let treeURL = "https://api.github.com/repos/\(owner)/\(repo)/git/trees/main?recursive=1"
-        guard let url = URL(string: treeURL) else { return [] }
+    // MARK: - Installation (via Claude Code CLI)
 
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else { return [] }
-
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tree = json["tree"] as? [[String: Any]] else { return [] }
-
-            // Find SKILL.md files
-            let skillPaths = tree.compactMap { item -> String? in
-                guard let path = item["path"] as? String,
-                      path.hasSuffix("/SKILL.md") || path == "SKILL.md" else { return nil }
-                return path
-            }
-
-            var plugins: [MarketplacePlugin] = []
-            for path in skillPaths {
-                if let plugin = await fetchSkillMd(
-                    owner: owner,
-                    repo: repo,
-                    path: path,
-                    category: category
-                ) {
-                    plugins.append(plugin)
-                }
-            }
-            return plugins
-        } catch {
-            logger.warning("Failed to scan tree for \(owner)/\(repo): \(error.localizedDescription)")
-            return []
+    /// 설치된 플러그인 이름 목록 조회.
+    func installedPluginNames() async -> Set<String> {
+        let (output, exitCode) = await runCLI(["plugin", "list", "--json"])
+        guard exitCode == 0,
+              let data = output.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return installedPluginNamesFromDisk()
         }
+        return Set(json.compactMap { $0["name"] as? String })
     }
 
-    /// Fetch and parse a single SKILL.md file from GitHub.
-    private func fetchSkillMd(owner: String, repo: String, path: String, category: String) async -> MarketplacePlugin? {
-        let rawURL = "https://raw.githubusercontent.com/\(owner)/\(repo)/main/\(path)"
-        guard let url = URL(string: rawURL) else { return nil }
-
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200,
-                  let content = String(data: data, encoding: .utf8) else { return nil }
-
-            let dirName: String
-            if path.contains("/") {
-                dirName = String(path.split(separator: "/").dropLast().last ?? "")
-            } else {
-                dirName = repo
-            }
-
-            return parseSkillMdContent(content, dirName: dirName, owner: owner, repo: repo, path: path, category: category)
-        } catch {
-            return nil
-        }
-    }
-
-    /// Parse SKILL.md frontmatter into a MarketplacePlugin.
-    private func parseSkillMdContent(_ content: String, dirName: String, owner: String, repo: String, path: String, category: String) -> MarketplacePlugin? {
-        let lines = content.components(separatedBy: "\n")
-        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return nil }
-
-        var name = dirName
-        var description = ""
-        var tags: [String] = []
-
-        for i in 1..<lines.count {
-            let line = lines[i]
-            if line.trimmingCharacters(in: .whitespaces) == "---" { break }
-
-            if line.hasPrefix("name:") {
-                let val = line.dropFirst(5).trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
-                if !val.isEmpty { name = val }
-            } else if line.hasPrefix("description:") {
-                let val = line.dropFirst(12).trimmingCharacters(in: .whitespaces)
-                description = val.trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
-            } else if line.hasPrefix("tags:") {
-                let val = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                if val.hasPrefix("[") {
-                    // Inline array: [tag1, tag2]
-                    let inner = val.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-                    tags = inner.split(separator: ",").map {
-                        $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
-                    }
-                }
-            }
-        }
-
-        // Clean description
-        if description.count > 120 {
-            description = String(description.prefix(117)) + "..."
-        }
-
-        return MarketplacePlugin(
-            name: name,
-            description: description,
-            version: "1.0.0",
-            author: owner,
-            repo: "\(owner)/\(repo)",
-            sourcePath: path,
-            installName: dirName,
-            category: category,
-            tags: tags,
-            isSkillMd: true
-        )
-    }
-
-    // MARK: - Installation
-
-    /// Get names of currently installed skills.
-    func installedSkillNames() -> Set<String> {
+    private func installedPluginNamesFromDisk() -> Set<String> {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let skillsDir = "\(home)/.claude/skills"
         let fm = FileManager.default
-
-        guard fm.fileExists(atPath: skillsDir) else { return [] }
-
-        do {
-            let entries = try fm.contentsOfDirectory(atPath: skillsDir)
-            return Set(entries.map { entry in
-                if entry.hasSuffix(".md") {
-                    return String(entry.dropLast(3))
-                }
-                return entry
-            })
-        } catch {
-            return []
+        var names: Set<String> = []
+        for dir in ["\(home)/.claude/plugins", "\(home)/.claude/skills"] {
+            if let entries = try? fm.contentsOfDirectory(atPath: dir) {
+                names.formUnion(entries.filter { !$0.hasPrefix(".") })
+            }
         }
+        return names
     }
 
-    /// Install a skill from the marketplace.
+    /// 플러그인 설치: `claude plugin install <name>@<marketplace>` 실행
     func installPlugin(_ plugin: MarketplacePlugin) async throws {
-        guard plugin.isSkillMd else {
-            throw MarketplaceError.unsupportedPluginType
+        let installArg = "\(plugin.name)@\(plugin.marketplace)"
+        let (_, exitCode) = await runCLI(["plugin", "install", installArg])
+        guard exitCode == 0 else {
+            throw MarketplaceError.installFailed(installArg)
         }
-
-        // Fetch the SKILL.md content
-        let rawURL = "https://raw.githubusercontent.com/\(plugin.repo)/main/\(plugin.sourcePath)"
-        guard let url = URL(string: rawURL) else {
-            throw MarketplaceError.invalidURL
-        }
-
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw MarketplaceError.fetchFailed
-        }
-
-        // Write to ~/.claude/skills/<name>/SKILL.md
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let skillDir = "\(home)/.claude/skills/\(plugin.installName)"
-        let fm = FileManager.default
-
-        try fm.createDirectory(atPath: skillDir, withIntermediateDirectories: true)
-
-        let destPath = "\(skillDir)/SKILL.md"
-        try data.write(to: URL(fileURLWithPath: destPath))
-
-        logger.info("Installed skill: \(plugin.name) to \(destPath, privacy: .public)")
+        logger.info("Installed plugin: \(plugin.name, privacy: .public) from \(plugin.marketplace, privacy: .public)")
     }
 
-    /// Uninstall a skill by removing its directory.
-    func uninstallPlugin(_ plugin: MarketplacePlugin) throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let skillDir = "\(home)/.claude/skills/\(plugin.installName)"
-        let fm = FileManager.default
-
-        guard fm.fileExists(atPath: skillDir) else {
-            throw MarketplaceError.notInstalled
+    /// 플러그인 제거: `claude plugin uninstall <name>` 실행
+    func uninstallPlugin(_ plugin: MarketplacePlugin) async throws {
+        let (_, exitCode) = await runCLI(["plugin", "uninstall", plugin.name])
+        guard exitCode == 0 else {
+            throw MarketplaceError.uninstallFailed(plugin.name)
         }
+        logger.info("Uninstalled plugin: \(plugin.name, privacy: .public)")
+    }
 
-        try fm.removeItem(atPath: skillDir)
-        logger.info("Uninstalled skill: \(plugin.name)")
+    // MARK: - CLI Runner
+
+    private func runCLI(_ arguments: [String]) async -> (output: String, exitCode: Int32) {
+        await withCheckedContinuation { continuation in
+            let process = Process()
+            let pipe = Pipe()
+
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["claude"] + arguments
+            process.standardOutput = pipe
+            process.standardError = pipe
+            process.environment = ProcessInfo.processInfo.environment
+
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                continuation.resume(returning: (output, process.terminationStatus))
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(returning: (error.localizedDescription, 1))
+            }
+        }
     }
 
     // MARK: - Errors
 
     enum MarketplaceError: LocalizedError {
-        case unsupportedPluginType
-        case invalidURL
-        case fetchFailed
-        case notInstalled
+        case installFailed(String)
+        case uninstallFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .unsupportedPluginType: return "이 플러그인 유형은 직접 설치를 지원하지 않습니다."
-            case .invalidURL: return "잘못된 플러그인 URL입니다."
-            case .fetchFailed: return "플러그인 콘텐츠를 가져오지 못했습니다."
-            case .notInstalled: return "플러그인이 설치되어 있지 않습니다."
+            case .installFailed(let name): return "플러그인 설치 실패: \(name)"
+            case .uninstallFailed(let name): return "플러그인 제거 실패: \(name)"
             }
         }
     }
