@@ -52,11 +52,12 @@ actor SetupService {
 
     struct ToolStatus: Sendable {
         var gstackInstalled: Bool
+        var superpowersInstalled: Bool
         var commandsInstalled: Bool
         var gitWorkflowInstalled: Bool
 
         var allInstalled: Bool {
-            gstackInstalled && commandsInstalled && gitWorkflowInstalled
+            gstackInstalled && superpowersInstalled && commandsInstalled && gitWorkflowInstalled
         }
     }
 
@@ -64,11 +65,13 @@ actor SetupService {
 
     func checkAllTools() async -> ToolStatus {
         async let gstack = isGstackInstalled()
+        async let superpowers = isSuperpowersInstalled()
         async let commands = areCommandsInstalled()
         async let gitWorkflow = isGitWorkflowInstalled()
 
         return ToolStatus(
             gstackInstalled: await gstack,
+            superpowersInstalled: await superpowers,
             commandsInstalled: await commands,
             gitWorkflowInstalled: await gitWorkflow
         )
@@ -87,6 +90,12 @@ actor SetupService {
                     return ("gstack", true)
                 }
             }
+            if !status.superpowersInstalled {
+                group.addTask {
+                    try await self.installSuperpowers()
+                    return ("superpowers", true)
+                }
+            }
             if !status.commandsInstalled {
                 group.addTask {
                     try await self.installCommands()
@@ -103,6 +112,7 @@ actor SetupService {
             for try await (tool, _) in group {
                 switch tool {
                 case "gstack": updated.gstackInstalled = true
+                case "superpowers": updated.superpowersInstalled = true
                 case "commands": updated.commandsInstalled = true
                 case "gitWorkflow": updated.gitWorkflowInstalled = true
                 default: break
@@ -115,27 +125,37 @@ actor SetupService {
 
     // MARK: - gstack
 
-    private func isGstackInstalled() async -> Bool {
-        // Check if gstack exists in npm global node_modules
-        if let globalDir = await npmGlobalPath() {
-            let gstackModulePath = (globalDir as NSString).appendingPathComponent("gstack")
-            if FileManager.default.fileExists(atPath: gstackModulePath) {
-                return true
-            }
-        }
-
-        // Fallback: check if gstack command is available via shell
-        do {
-            let output = try await runShell("which gstack")
-            return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        } catch {
-            return false
-        }
+    private func isGstackInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: claudeHomePath("skills/gstack/SKILL.md"))
     }
 
     private func installGstack() async throws {
-        logger.info("Installing gstack globally...")
-        try await runShell("npm install -g gstack")
+        let targetDir = claudeHomePath("skills/gstack")
+        let fm = FileManager.default
+
+        if fm.fileExists(atPath: targetDir) {
+            try fm.removeItem(atPath: targetDir)
+        }
+
+        logger.info("Installing gstack via git clone + setup...")
+        try await runShell("git clone https://github.com/garrytan/gstack.git \"\(targetDir)\" && cd \"\(targetDir)\" && ./setup")
+    }
+
+    // MARK: - Superpowers
+
+    private func isSuperpowersInstalled() -> Bool {
+        let jsonPath = claudeHomePath("plugins/installed_plugins.json")
+        guard let data = FileManager.default.contents(atPath: jsonPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let plugins = json["plugins"] as? [String: Any] else {
+            return false
+        }
+        return plugins["superpowers@claude-plugins-official"] != nil
+    }
+
+    private func installSuperpowers() async throws {
+        logger.info("Installing superpowers via claude plugin...")
+        try await runShell("claude plugin install superpowers@claude-plugins-official")
     }
 
     // MARK: - Commands (start, submit, cancel)
@@ -266,16 +286,6 @@ actor SetupService {
 
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("workspace/ClaudeWork").path
-    }
-
-    private func npmGlobalPath() async -> String? {
-        do {
-            let output = try await runShell("npm root -g")
-            let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            return path.isEmpty ? nil : path
-        } catch {
-            return nil
-        }
     }
 
     @discardableResult

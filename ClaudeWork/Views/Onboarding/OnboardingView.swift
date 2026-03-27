@@ -158,6 +158,7 @@ struct OnboardingView: View {
             } else if let status = toolStatus {
                 VStack(alignment: .leading, spacing: 10) {
                     toolStatusRow("gstack (QA/브라우징)", installed: status.gstackInstalled)
+                    toolStatusRow("Superpowers (스킬 프레임워크)", installed: status.superpowersInstalled)
                     toolStatusRow("Commands (start/submit/cancel)", installed: status.commandsInstalled)
                     toolStatusRow("Git Workflow 스킬", installed: status.gitWorkflowInstalled)
                 }
