@@ -53,7 +53,7 @@ struct Attachment: Identifiable, Sendable {
 
 enum AttachmentFactory {
 
-    private static let imageExtensions: Set<String> = [
+    static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "heic"
     ]
 
