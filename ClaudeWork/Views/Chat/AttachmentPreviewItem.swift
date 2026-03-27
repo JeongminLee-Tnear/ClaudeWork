@@ -95,7 +95,7 @@ struct AttachmentPreviewItem: View {
     }
 
     private func makeCGImage() -> CGImage? {
-        guard let data = attachment.imageData ?? attachment.thumbnail else { return nil }
+        guard let data = attachment.imageData else { return nil }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }

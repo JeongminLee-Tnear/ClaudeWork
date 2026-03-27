@@ -511,17 +511,7 @@ struct ChatView: View {
 
     private func processItemProviders(_ providers: [NSItemProvider]) {
         for provider in providers {
-            if provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) {
-                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                    guard let data, let image = NSImage(data: data) else { return }
-                    if let attachment = AttachmentFactory.fromClipboardImage(image) {
-                        DispatchQueue.main.async {
-                            appState.addAttachment(attachment)
-                        }
-                    }
-                }
-            }
-            else if provider.hasRepresentationConforming(toTypeIdentifier: UTType.fileURL.identifier) {
+            if provider.hasRepresentationConforming(toTypeIdentifier: UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
                     guard let data = item as? Data,
                           let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
@@ -529,6 +519,15 @@ struct ChatView: View {
                         DispatchQueue.main.async {
                             appState.addAttachment(attachment)
                         }
+                    }
+                }
+            } else if provider.hasRepresentationConforming(toTypeIdentifier: UTType.image.identifier) {
+                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                    guard let data else { return }
+                    let name = "drop-\(UUID().uuidString.prefix(8)).png"
+                    let attachment = Attachment(type: .image, name: name, imageData: data)
+                    DispatchQueue.main.async {
+                        appState.addAttachment(attachment)
                     }
                 }
             }
