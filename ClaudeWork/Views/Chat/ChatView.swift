@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @Environment(AppState.self) private var appState
     @FocusState private var isInputFocused: Bool
-    @State private var inputText = ""
     @State private var showStartResponse = false
     @State private var showFilePicker = false
     @State private var showSlashPopup = false
@@ -12,6 +11,7 @@ struct ChatView: View {
     @State private var slashDetailCommand: SlashCommand?
     @State private var textPreviewAttachment: Attachment?
     @State private var isDragOver = false
+    @State private var lastPasteChangeCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -223,7 +223,7 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ForEach(messages) { message in
+                    ForEach(appState.messages) { message in
                         MessageBubble(message: message)
                             .id(message.id)
                     }
@@ -234,18 +234,18 @@ struct ChatView: View {
                     }
 
                     // 작업 요약 + 웹 미리보기 (스트리밍 완료 후 표시)
-                    if !appState.isStreaming && !messages.isEmpty {
-                        ActivitySummaryView(messages: messages)
+                    if !appState.isStreaming && !appState.messages.isEmpty {
+                        ActivitySummaryView(messages: appState.messages)
                             .id("activity-summary")
 
-                        WebPreviewButton(messages: messages)
+                        WebPreviewButton(messages: appState.messages)
                             .id("web-preview")
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
             }
-            .onChange(of: messages.count) { _, _ in
+            .onChange(of: appState.messages.count) { _, _ in
                 scrollToBottom(proxy: proxy)
             }
             .onChange(of: appState.isStreaming) { _, _ in
@@ -284,7 +284,7 @@ struct ChatView: View {
     // MARK: - Input Bar
 
     private var slashQuery: String {
-        let trimmed = inputText.trimmingCharacters(in: .whitespaces)
+        let trimmed = appState.inputText.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("/") else { return "" }
         if !trimmed.contains(" ") {
             return trimmed
@@ -335,18 +335,23 @@ struct ChatView: View {
                     handleFileImport(result)
                 }
 
-                TextField("메시지를 입력하세요...", text: $inputText, axis: .vertical)
+                TextField("메시지를 입력하세요...", text: Bindable(appState).inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(1...5)
                     .focused($isInputFocused)
-                    .onChange(of: inputText) { oldValue, newValue in
+                    .onChange(of: appState.inputText) { oldValue, newValue in
+                        // 붙여넣기 감지: delta > 1 && 페이스트보드 changeCount가 변했을 때만
+                        let pbCount = NSPasteboard.general.changeCount
                         let delta = newValue.count - oldValue.count
-                        if delta > 1, let attachment = detectPasteAttachment() {
-                            appState.addAttachment(attachment)
-                            inputText = oldValue
-                            return
+                        if delta > 1 && pbCount != lastPasteChangeCount {
+                            lastPasteChangeCount = pbCount
+                            if let attachment = detectPasteAttachment() {
+                                appState.addAttachment(attachment)
+                                appState.inputText = oldValue
+                                return
+                            }
                         }
 
                         let trimmed = newValue.trimmingCharacters(in: .whitespaces)
@@ -411,7 +416,7 @@ struct ChatView: View {
 
                 if !showSlashPopup {
                     ClaudeSendButton(
-                        isEnabled: !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        isEnabled: !appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || !appState.attachments.isEmpty,
                         action: sendMessage
                     )
@@ -464,10 +469,9 @@ struct ChatView: View {
         }
         if cmd.acceptsInput {
             // 입력 가능 명령어 → 인풋에 "/명령어 " 삽입하고 대기
-            inputText = cmd.command + " "
+            appState.inputText = cmd.command + " "
         } else {
-            // 바로 실행
-            inputText = ""
+            appState.inputText = ""
             Task { await appState.sendSlashCommand(cmd.command) }
         }
     }
@@ -495,15 +499,9 @@ struct ChatView: View {
 
     // MARK: - Helpers
 
-    private var messages: [ChatMessage] {
-        appState.messages
-    }
-
     private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || !appState.attachments.isEmpty else { return }
-        appState.inputText = text
-        inputText = ""
+        guard !appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !appState.attachments.isEmpty else { return }
         Task { await appState.send() }
     }
 
@@ -575,7 +573,7 @@ struct ChatView: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo("streaming-indicator", anchor: .bottom)
             }
-        } else if let lastMessage = messages.last {
+        } else if let lastMessage = appState.messages.last {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
