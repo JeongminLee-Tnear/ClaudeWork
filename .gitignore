@@ -7,3 +7,6 @@ xcuserdata/
 
 # gstack browser logs
 .gstack/
+
+# Claude config
+.claude/
