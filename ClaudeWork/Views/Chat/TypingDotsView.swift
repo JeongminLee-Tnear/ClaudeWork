@@ -30,9 +30,9 @@ struct PulseRingView: View {
                     )
                 )
                 .frame(width: 6, height: 6)
-                .scaleEffect(animated ? 1.0 : 0.7)
+                .scaleEffect(animated ? 1.0 : 0.85)
                 .animation(
-                    .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                    .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
                     value: animated
                 )
 
@@ -41,12 +41,12 @@ struct PulseRingView: View {
                 Circle()
                     .strokeBorder(gradient, lineWidth: 1.5)
                     .frame(width: size, height: size)
-                    .scaleEffect(animated ? 1.4 : 0.4)
-                    .opacity(animated ? 0 : 0.8)
+                    .scaleEffect(animated ? 1.2 : 0.4)
+                    .opacity(animated ? 0 : 0.5)
                     .animation(
-                        .easeOut(duration: 1.8)
+                        .easeOut(duration: 3.0)
                             .repeatForever(autoreverses: false)
-                            .delay(Double(index) * 0.6),
+                            .delay(Double(index) * 1.0),
                         value: animated
                     )
             }

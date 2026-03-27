@@ -34,6 +34,7 @@ struct MarkdownContentView: View {
                 }
             }
         }
+        .textSelection(.enabled)
     }
 
     // MARK: - Heading View
@@ -55,7 +56,6 @@ struct MarkdownContentView: View {
             .font(fontForHeading(level))
             .fontWeight(level <= 2 ? .bold : .semibold)
             .foregroundStyle(ClaudeTheme.textPrimary)
-            .textSelection(.enabled)
             .padding(.top, level <= 2 ? 16 : 10)
             .padding(.bottom, 4)
 
@@ -94,11 +94,9 @@ struct MarkdownContentView: View {
             ) {
                 Text(attributed)
                     .font(.system(size: 14))
-                    .textSelection(.enabled)
             } else {
                 Text(content)
                     .font(.system(size: 14))
-                    .textSelection(.enabled)
             }
         }
         .padding(.leading, 4)
@@ -119,13 +117,11 @@ struct MarkdownContentView: View {
                 Text(attributed)
                     .font(.system(size: 14))
                     .foregroundStyle(ClaudeTheme.textSecondary)
-                    .textSelection(.enabled)
                     .padding(.leading, 10)
             } else {
                 Text(content)
                     .font(.system(size: 14))
                     .foregroundStyle(ClaudeTheme.textSecondary)
-                    .textSelection(.enabled)
                     .padding(.leading, 10)
             }
         }
@@ -142,11 +138,9 @@ struct MarkdownContentView: View {
             ) {
                 Text(attributed)
                     .font(.system(size: 14))
-                    .textSelection(.enabled)
             } else {
                 Text(content)
                     .font(.system(size: 14))
-                    .textSelection(.enabled)
             }
         }
     }
@@ -440,12 +434,10 @@ private struct MarkdownTableView: View {
                 Text(attributed)
                     .font(.system(size: 13, weight: isHeader ? .semibold : .regular))
                     .foregroundStyle(ClaudeTheme.textPrimary)
-                    .textSelection(.enabled)
             } else {
                 Text(text)
                     .font(.system(size: 13, weight: isHeader ? .semibold : .regular))
                     .foregroundStyle(ClaudeTheme.textPrimary)
-                    .textSelection(.enabled)
             }
         }
         .padding(.horizontal, 12)

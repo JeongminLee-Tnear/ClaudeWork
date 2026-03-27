@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageBubble: View {
     let message: ChatMessage
+    @State private var isCopied = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -49,6 +50,18 @@ struct MessageBubble: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 14)
                 .background(ClaudeTheme.userBubble, in: bubbleShape)
+                .contextMenu {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.content, forType: .string)
+                        isCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            isCopied = false
+                        }
+                    } label: {
+                        Label(isCopied ? "복사됨" : "메시지 복사", systemImage: isCopied ? "checkmark" : "doc.on.doc")
+                    }
+                }
                 .accessibilityLabel("내 메시지: \(message.content)")
         } else {
             MarkdownContentView(text: message.content)
@@ -60,6 +73,18 @@ struct MessageBubble: View {
                     bubbleShape
                         .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
                 )
+                .contextMenu {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.content, forType: .string)
+                        isCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            isCopied = false
+                        }
+                    } label: {
+                        Label(isCopied ? "복사됨" : "메시지 복사", systemImage: isCopied ? "checkmark" : "doc.on.doc")
+                    }
+                }
                 .accessibilityLabel("어시스턴트: \(message.content)")
         }
     }

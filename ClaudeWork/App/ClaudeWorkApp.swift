@@ -14,5 +14,13 @@ struct ClaudeWorkApp: App {
                 }
         }
         .defaultSize(width: 1000, height: 700)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("새 대화") {
+                    appState.startNewChat()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+        }
     }
 }

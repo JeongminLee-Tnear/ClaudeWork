@@ -33,6 +33,21 @@ struct ChatView: View {
             }
         }
         .overlay {
+            // 권한 허용 팝업
+            if let request = appState.pendingPermissions.first {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+
+                    PermissionModal(request: request)
+                        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+                        .shadow(color: ClaudeTheme.shadowColor, radius: 20)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: appState.pendingPermissions.count)
+            }
+        }
+        .overlay {
             // Skill Marketplace 패널
             if appState.showMarketplace {
                 ZStack {
