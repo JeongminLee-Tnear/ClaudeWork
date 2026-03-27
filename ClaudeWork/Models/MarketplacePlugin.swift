@@ -40,6 +40,17 @@ struct MarketplacePlugin: Identifiable, Codable, Sendable {
         }
     }
 
+    /// 마켓플레이스(출처) 한글 라벨.
+    var marketplaceLabel: String {
+        switch marketplace {
+        case "claude-plugins-official": return "공식 플러그인"
+        case "anthropic-agent-skills": return "에이전트 스킬"
+        case "knowledge-work-plugins": return "지식 작업"
+        case "financial-services-plugins": return "금융 서비스"
+        default: return marketplace
+        }
+    }
+
     /// 설치 명령어 텍스트 (UI 표시용)
     var installCommand: String {
         "/plugin install \(name)@\(marketplace)"

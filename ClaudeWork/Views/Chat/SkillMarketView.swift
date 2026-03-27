@@ -110,8 +110,8 @@ struct SkillMarketView: View {
                     filterChip("전체")
                     filterChip("설치됨")
 
-                    ForEach(availableCategories, id: \.self) { cat in
-                        filterChip(cat)
+                    ForEach(availableMarketplaces, id: \.self) { label in
+                        filterChip(label)
                     }
                 }
             }
@@ -189,7 +189,7 @@ struct SkillMarketView: View {
         if selectedFilter == "설치됨" {
             plugins = plugins.filter { appState.marketplaceInstalledNames.contains($0.name) }
         } else if selectedFilter != "전체" {
-            plugins = plugins.filter { $0.categoryLabel == selectedFilter || $0.marketplace == selectedFilter }
+            plugins = plugins.filter { $0.marketplaceLabel == selectedFilter }
         }
 
         if !searchText.isEmpty {
@@ -205,12 +205,12 @@ struct SkillMarketView: View {
         return plugins
     }
 
-    private var availableCategories: [String] {
-        var categoryCounts: [String: Int] = [:]
+    private var availableMarketplaces: [String] {
+        var counts: [String: Int] = [:]
         for plugin in appState.marketplaceCatalog {
-            categoryCounts[plugin.categoryLabel, default: 0] += 1
+            counts[plugin.marketplaceLabel, default: 0] += 1
         }
-        return Array(categoryCounts.sorted { $0.value > $1.value }.prefix(8).map(\.key))
+        return counts.sorted { $0.value > $1.value }.map(\.key)
     }
 }
 
@@ -235,7 +235,7 @@ struct PluginCard: View {
                     .background(ClaudeTheme.accentSubtle)
                     .clipShape(Capsule())
 
-                Text(plugin.marketplace)
+                Text(plugin.marketplaceLabel)
                     .font(.system(size: 10))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .padding(.horizontal, 6)
