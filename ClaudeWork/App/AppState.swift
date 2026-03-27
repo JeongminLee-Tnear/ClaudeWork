@@ -38,6 +38,10 @@ final class AppState {
     ]
     var selectedModel: String = "claude-opus-4-6"
 
+    // MARK: - Focus
+
+    var requestInputFocus = false
+
     // MARK: - Sessions
 
     var sessions: [ChatSession] = []
@@ -210,14 +214,14 @@ final class AppState {
         ))
         isStreaming = true
 
+        await permission.refreshRunToken()
+
         var hookSettingsPath: String?
         do {
             hookSettingsPath = try await permission.writeHookSettingsFile()
         } catch {
             logger.error("Failed to write hook settings: \(error.localizedDescription)")
         }
-
-        await permission.refreshRunToken()
 
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -289,6 +293,17 @@ final class AppState {
                         if let lastIndex = self.messages.indices.last,
                            self.messages[lastIndex].role == .assistant,
                            self.messages[lastIndex].isStreaming {
+                            // Preserve tool results that were already set by earlier .user events
+                            let existingById = Dictionary(
+                                uniqueKeysWithValues: self.messages[lastIndex].toolCalls
+                                    .compactMap { tc in tc.result != nil ? (tc.id, tc) : nil }
+                            )
+                            for i in newMessage.toolCalls.indices {
+                                if let existing = existingById[newMessage.toolCalls[i].id] {
+                                    newMessage.toolCalls[i].result = existing.result
+                                    newMessage.toolCalls[i].isError = existing.isError
+                                }
+                            }
                             self.messages[lastIndex] = newMessage
                         } else {
                             self.messages.append(newMessage)
@@ -317,11 +332,7 @@ final class AppState {
                         self.isStreaming = false
                         self.isThinking = false
 
-                        // Mark the last assistant message as no longer streaming
-                        if let lastIndex = self.messages.indices.last,
-                           self.messages[lastIndex].role == .assistant {
-                            self.messages[lastIndex].isStreaming = false
-                        }
+                        self.finalizeLastAssistantMessage()
 
                         // Save session ID from result
                         self.currentSessionId = resultEvent.sessionId
@@ -373,16 +384,24 @@ final class AppState {
                 self.stopFlushTimer()
                 if self.isStreaming {
                     self.isStreaming = false
-                        self.isThinking = false
-                    // Mark last message as done streaming
-                    if let lastIndex = self.messages.indices.last,
-                       self.messages[lastIndex].role == .assistant {
-                        self.messages[lastIndex].isStreaming = false
-                    }
+                    self.isThinking = false
+                    self.finalizeLastAssistantMessage()
                 }
             }
 
         } // end for-await — no explicit catch needed; AsyncStream doesn't throw
+    }
+
+    /// Mark the last assistant message as done streaming and fill in any tool calls that never received a result.
+    private func finalizeLastAssistantMessage() {
+        guard let lastIndex = messages.indices.last,
+              messages[lastIndex].role == .assistant else { return }
+        messages[lastIndex].isStreaming = false
+        for i in messages[lastIndex].toolCalls.indices {
+            if messages[lastIndex].toolCalls[i].result == nil {
+                messages[lastIndex].toolCalls[i].result = ""
+            }
+        }
     }
 
     /// Handle unknown/partial events that may contain streaming text deltas.
@@ -688,6 +707,7 @@ final class AppState {
     func startNewChat() {
         messages = []
         currentSessionId = nil
+        requestInputFocus = true
     }
 
     func deleteSession(_ session: ChatSession) async {
@@ -712,6 +732,7 @@ final class AppState {
         guard let session = sessions.first(where: { $0.id == id }) else { return }
         Task {
             await resumeSession(session)
+            requestInputFocus = true
         }
     }
 
@@ -730,7 +751,7 @@ final class AppState {
         defer { marketplaceLoading = false }
 
         async let catalog = marketplace.fetchCatalog(forceRefresh: forceRefresh)
-        async let installed = marketplace.installedSkillNames()
+        async let installed = marketplace.installedPluginNames()
 
         marketplaceCatalog = await catalog
         marketplaceInstalledNames = await installed
@@ -741,7 +762,7 @@ final class AppState {
         do {
             try await marketplace.installPlugin(plugin)
             marketplacePluginStates[plugin.id] = .installed
-            marketplaceInstalledNames.insert(plugin.installName)
+            marketplaceInstalledNames.insert(plugin.name)
             // Refresh local skills
 
         } catch {
@@ -753,7 +774,7 @@ final class AppState {
     func uninstallMarketplacePlugin(_ plugin: MarketplacePlugin) async {
         do {
             try await marketplace.uninstallPlugin(plugin)
-            marketplaceInstalledNames.remove(plugin.installName)
+            marketplaceInstalledNames.remove(plugin.name)
             marketplacePluginStates[plugin.id] = .notInstalled
             // Refresh local skills
 
@@ -825,6 +846,13 @@ final class AppState {
             try await persistence.saveSession(session)
         } catch {
             logger.error("Failed to save session: \(error.localizedDescription)")
+        }
+
+        // Update in-memory sessions list
+        if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[index] = session
+        } else {
+            sessions.insert(session, at: 0)
         }
 
         // Update project's last session ID

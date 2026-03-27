@@ -56,6 +56,12 @@ struct ChatView: View {
                 handleStartCompletion()
             }
         }
+        .onChange(of: appState.requestInputFocus) { _, newValue in
+            if newValue {
+                isInputFocused = true
+                appState.requestInputFocus = false
+            }
+        }
     }
 
     // MARK: - Toolbar
@@ -252,24 +258,14 @@ struct ChatView: View {
                 scrollToBottom(proxy: proxy)
             }
         }
+        .simultaneousGesture(TapGesture().onEnded {
+            isInputFocused = true
+        })
     }
 
     private var streamingIndicator: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 5) {
-                ForEach(0..<3) { index in
-                    Circle()
-                        .fill(ClaudeTheme.accent)
-                        .frame(width: 6, height: 6)
-                        .opacity(0.4)
-                        .animation(
-                            .easeInOut(duration: 0.6)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.2),
-                            value: appState.isStreaming
-                        )
-                }
-            }
+            PulseRingView()
 
             Text(appState.isThinking ? "생각하는 중..." : "응답 생성 중...")
                 .font(.system(size: 13))
