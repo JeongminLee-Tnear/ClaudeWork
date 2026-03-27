@@ -244,6 +244,24 @@ actor SetupService {
         }
 
         try role.rawValue.write(toFile: rolePath, atomically: true, encoding: .utf8)
+        ensureGitignoreContainsClaude(at: projectPath)
+    }
+
+    /// .gitignore에 .claude/ 항목이 없으면 추가
+    private nonisolated func ensureGitignoreContainsClaude(at projectPath: String) {
+        let gitignorePath = (projectPath as NSString).appendingPathComponent(".gitignore")
+        let fm = FileManager.default
+        let entry = ".claude/"
+
+        if fm.fileExists(atPath: gitignorePath) {
+            guard let content = try? String(contentsOfFile: gitignorePath, encoding: .utf8) else { return }
+            let lines = content.components(separatedBy: .newlines)
+            if lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == entry }) { return }
+            let newContent = content.hasSuffix("\n") ? content + entry + "\n" : content + "\n" + entry + "\n"
+            try? newContent.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+        } else {
+            try? (entry + "\n").write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+        }
     }
 
     // MARK: - Helpers
