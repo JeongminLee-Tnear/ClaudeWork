@@ -62,14 +62,19 @@ struct AttachmentPreviewItem: View {
 
     // MARK: - Image Card
 
+    @State private var renderedImage: CGImage?
+
     private var imageCard: some View {
         ZStack(alignment: .bottom) {
-            if let nsImage = loadImage() {
-                Image(nsImage: nsImage)
+            if let cgImage = renderedImage {
+                Image(decorative: cgImage, scale: 2.0)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .frame(width: cardWidth, height: cardHeight)
+                    .clipped()
             } else {
                 ClaudeTheme.surfaceSecondary
+                    .frame(width: cardWidth, height: cardHeight)
                 Image(systemName: "photo")
                     .font(.system(size: 22))
                     .foregroundStyle(ClaudeTheme.textTertiary)
@@ -84,22 +89,15 @@ struct AttachmentPreviewItem: View {
                 .frame(maxWidth: .infinity)
                 .background(.black.opacity(0.5))
         }
+        .task(id: attachment.id) {
+            renderedImage = makeCGImage()
+        }
     }
 
-    private func loadImage() -> NSImage? {
-        // 1) 이미지 원본 데이터에서 로드
-        if let data = attachment.imageData {
-            return NSImage(data: data)
-        }
-        // 2) 썸네일 데이터에서 로드
-        if let data = attachment.thumbnail {
-            return NSImage(data: data)
-        }
-        // 3) 파일 경로에서 로드
-        if !attachment.path.isEmpty {
-            return NSImage(contentsOf: URL(fileURLWithPath: attachment.path))
-        }
-        return nil
+    private func makeCGImage() -> CGImage? {
+        guard let data = attachment.imageData ?? attachment.thumbnail else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
     // MARK: - File Card

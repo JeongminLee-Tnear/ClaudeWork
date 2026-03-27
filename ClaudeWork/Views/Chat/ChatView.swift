@@ -540,25 +540,24 @@ struct ChatView: View {
     private func detectPasteAttachment() -> Attachment? {
         let pb = NSPasteboard.general
 
-        // 1) 이미지 데이터 직접 꺼내기 (PNG → TIFF 순서)
-        let imageTypes: [NSPasteboard.PasteboardType] = [.png, .tiff]
-        for type in imageTypes {
-            if let data = pb.data(forType: type), let _ = NSImage(data: data) {
-                let name = "clipboard-\(UUID().uuidString.prefix(8)).png"
-                return Attachment(type: .image, name: name, imageData: data)
-            }
-        }
-
-        // 2) 파일 URL (이미지 파일이면 데이터도 읽어서 저장)
+        // 1) 파일 URL 우선 — Finder 복사 시 TIFF는 파일 아이콘이므로 파일에서 직접 읽어야 함
         if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL] {
             for url in urls where url.isFileURL {
                 let ext = url.pathExtension.lowercased()
-                let isImage = AttachmentFactory.imageExtensions.contains(ext)
-                if isImage, let data = try? Data(contentsOf: url) {
+                if AttachmentFactory.imageExtensions.contains(ext),
+                   let data = try? Data(contentsOf: url) {
                     return Attachment(type: .image, name: url.lastPathComponent, path: url.path, imageData: data)
                 } else {
                     return AttachmentFactory.fromFileURL(url)
                 }
+            }
+        }
+
+        // 2) 순수 이미지 데이터 (스크린샷, 웹에서 이미지 복사 등 — 파일 URL 없는 경우)
+        for type in [NSPasteboard.PasteboardType.png, .tiff] {
+            if let data = pb.data(forType: type), NSImage(data: data) != nil {
+                let name = "clipboard-\(UUID().uuidString.prefix(8)).png"
+                return Attachment(type: .image, name: name, imageData: data)
             }
         }
 
