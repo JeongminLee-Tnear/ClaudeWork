@@ -539,28 +539,20 @@ struct ChatView: View {
     private func detectPasteAttachment() -> Attachment? {
         let pb = NSPasteboard.general
 
-        // 1) 파일 URL 우선 — Finder 복사 시 TIFF는 파일 아이콘이므로 파일에서 직접 읽어야 함
-        if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL] {
-            for url in urls where url.isFileURL {
-                let ext = url.pathExtension.lowercased()
-                if AttachmentFactory.imageExtensions.contains(ext),
-                   let data = try? Data(contentsOf: url) {
-                    return Attachment(type: .image, name: url.lastPathComponent, path: url.path, imageData: data)
-                } else {
-                    return AttachmentFactory.fromFileURL(url)
-                }
-            }
+        // 파일 URL 우선 — Finder 복사 시 TIFF는 파일 아이콘이므로 파일에서 직접 읽어야 함
+        if let urls = pb.readObjects(forClasses: [NSURL.self]) as? [URL],
+           let url = urls.first(where: \.isFileURL) {
+            return AttachmentFactory.fromFileURL(url)
         }
 
-        // 2) 순수 이미지 데이터 (스크린샷, 웹에서 이미지 복사 등 — 파일 URL 없는 경우)
+        // 순수 이미지 데이터 (스크린샷, 웹에서 이미지 복사 등)
         for type in [NSPasteboard.PasteboardType.png, .tiff] {
-            if let data = pb.data(forType: type), NSImage(data: data) != nil {
-                let name = "clipboard-\(UUID().uuidString.prefix(8)).png"
-                return Attachment(type: .image, name: name, imageData: data)
+            if let data = pb.data(forType: type) {
+                return Attachment(type: .image, name: "clipboard-\(UUID().uuidString.prefix(8)).png", imageData: data)
             }
         }
 
-        // 3) 긴 텍스트
+        // 긴 텍스트
         if let text = pb.string(forType: .string),
            text.count >= AttachmentFactory.longTextThreshold {
             return AttachmentFactory.fromLongText(text)
