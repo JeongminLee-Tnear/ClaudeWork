@@ -6,6 +6,7 @@ struct FilePreviewView: View {
     let fileName: String
     @State private var content: String?
     @State private var highlightedContent: AttributedString?
+    @State private var lineCount = 0
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isCopied = false
@@ -53,7 +54,6 @@ struct FilePreviewView: View {
             Spacer()
 
             if let content {
-                let lineCount = content.components(separatedBy: "\n").count
                 Text("\(lineCount) lines")
                     .font(.system(size: 11))
                     .foregroundStyle(ClaudeTheme.textTertiary)
@@ -91,8 +91,7 @@ struct FilePreviewView: View {
     // MARK: - Content
 
     private func codeContentView(_ text: String) -> some View {
-        let lines = text.components(separatedBy: "\n")
-        let lineNumberWidth = max(String(lines.count).count * 9 + 16, 36)
+        let lineNumberWidth = max(String(lineCount).count * 9 + 16, 36)
         let highlighted = highlightedContent ?? AttributedString(text)
 
         return GeometryReader { geometry in
@@ -100,7 +99,7 @@ struct FilePreviewView: View {
                 HStack(alignment: .top, spacing: 0) {
                     // Line numbers
                     VStack(alignment: .trailing, spacing: 0) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
+                        ForEach(0..<lineCount, id: \.self) { index in
                             Text("\(index + 1)")
                                 .font(.system(size: 12, design: .monospaced))
                                 .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.6))
@@ -174,12 +173,13 @@ struct FilePreviewView: View {
             }.value
 
             if let text = String(data: data, encoding: .utf8) {
-                let ext = (fileName as NSString).pathExtension.lowercased()
+                let ext = fileExtension
                 let highlighted = await Task.detached {
                     SyntaxHighlighter.highlight(text, language: ext)
                 }.value
                 content = text
                 highlightedContent = highlighted
+                lineCount = text.components(separatedBy: "\n").count
             } else {
                 errorMessage = "binary file -- preview unavailable"
             }
