@@ -5,6 +5,7 @@ struct FilePreviewView: View {
     let filePath: String
     let fileName: String
     @State private var content: String?
+    @State private var highlightedContent: AttributedString?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isCopied = false
@@ -25,6 +26,7 @@ struct FilePreviewView: View {
         }
         .frame(minWidth: 700, idealWidth: 1000, maxWidth: 1200, minHeight: 500, idealHeight: 750, maxHeight: 900)
         .background(ClaudeTheme.background)
+        .focusable(false)
         .task { await loadFile() }
     }
 
@@ -91,7 +93,7 @@ struct FilePreviewView: View {
     private func codeContentView(_ text: String) -> some View {
         let lines = text.components(separatedBy: "\n")
         let lineNumberWidth = max(String(lines.count).count * 9 + 16, 36)
-        let highlighted = SyntaxHighlighter.highlight(text, language: fileExtension)
+        let highlighted = highlightedContent ?? AttributedString(text)
 
         return GeometryReader { geometry in
             ScrollView([.vertical, .horizontal]) {
@@ -172,7 +174,12 @@ struct FilePreviewView: View {
             }.value
 
             if let text = String(data: data, encoding: .utf8) {
+                let ext = (fileName as NSString).pathExtension.lowercased()
+                let highlighted = await Task.detached {
+                    SyntaxHighlighter.highlight(text, language: ext)
+                }.value
                 content = text
+                highlightedContent = highlighted
             } else {
                 errorMessage = "binary file -- preview unavailable"
             }
