@@ -87,15 +87,17 @@ struct AttachmentPreviewItem: View {
     }
 
     private func loadImage() -> NSImage? {
-        // 1) 파일 경로에서 직접 로드
-        if !attachment.path.isEmpty {
-            if let img = NSImage(contentsOf: URL(fileURLWithPath: attachment.path)) {
-                return img
-            }
+        // 1) 이미지 원본 데이터에서 로드
+        if let data = attachment.imageData {
+            return NSImage(data: data)
         }
         // 2) 썸네일 데이터에서 로드
         if let data = attachment.thumbnail {
             return NSImage(data: data)
+        }
+        // 3) 파일 경로에서 로드
+        if !attachment.path.isEmpty {
+            return NSImage(contentsOf: URL(fileURLWithPath: attachment.path))
         }
         return nil
     }

@@ -11,6 +11,8 @@ struct Attachment: Identifiable, Sendable {
     let fileSize: Int64?
     let thumbnail: Data?
     let textContent: String?
+    /// 이미지 원본 데이터 (프리뷰 표시용)
+    let imageData: Data?
 
     init(
         id: UUID = UUID(),
@@ -19,7 +21,8 @@ struct Attachment: Identifiable, Sendable {
         path: String = "",
         fileSize: Int64? = nil,
         thumbnail: Data? = nil,
-        textContent: String? = nil
+        textContent: String? = nil,
+        imageData: Data? = nil
     ) {
         self.id = id
         self.type = type
@@ -28,6 +31,7 @@ struct Attachment: Identifiable, Sendable {
         self.fileSize = fileSize
         self.thumbnail = thumbnail
         self.textContent = textContent
+        self.imageData = imageData
     }
 
     enum AttachmentType: String, Sendable {
@@ -85,7 +89,8 @@ enum AttachmentFactory {
             name: fileName,
             path: filePath.path,
             fileSize: Int64(pngData.count),
-            thumbnail: thumbnailData
+            thumbnail: thumbnailData,
+            imageData: pngData
         )
     }
 
@@ -98,8 +103,12 @@ enum AttachmentFactory {
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int64
 
         var thumbnail: Data?
-        if type == .image, let image = NSImage(contentsOf: url) {
-            thumbnail = generateThumbnail(from: image, maxSize: 200)
+        var imgData: Data?
+        if type == .image {
+            imgData = try? Data(contentsOf: url)
+            if let data = imgData, let image = NSImage(data: data) {
+                thumbnail = generateThumbnail(from: image, maxSize: 200)
+            }
         }
 
         return Attachment(
@@ -107,7 +116,8 @@ enum AttachmentFactory {
             name: name,
             path: url.path,
             fileSize: fileSize,
-            thumbnail: thumbnail
+            thumbnail: thumbnail,
+            imageData: imgData
         )
     }
 
